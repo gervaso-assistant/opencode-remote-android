@@ -113,9 +113,9 @@ class OpencodeRepository(
         }
     }
 
-    suspend fun loadSessionDetail(sessionId: String) {
+    suspend fun loadSessionDetail(sessionId: String, directory: String?) {
         runCatching {
-            val messages = api.getMessages(_config.value, sessionId)
+            val messages = api.getMessages(_config.value, sessionId, directory = directory)
             val todos = api.getTodos(_config.value, sessionId)
             val diff = api.getDiff(_config.value, sessionId)
             _messages.value = messages.mapNotNull { envelope ->
@@ -141,30 +141,30 @@ class OpencodeRepository(
         }
     }
 
-    suspend fun sendMessage(sessionId: String, text: String) {
+    suspend fun sendMessage(sessionId: String, text: String, directory: String?) {
         runCatching {
-            api.sendMessage(_config.value, sessionId, text)
-            loadSessionDetail(sessionId)
+            api.sendMessage(_config.value, sessionId, text, directory)
+            loadSessionDetail(sessionId, directory)
             refreshSessions()
         }.onFailure {
             _error.value = it.message
         }
     }
 
-    suspend fun sendCommand(sessionId: String, command: String, arguments: String) {
+    suspend fun sendCommand(sessionId: String, command: String, arguments: String, directory: String?) {
         runCatching {
-            api.sendCommand(_config.value, sessionId, command, arguments)
-            loadSessionDetail(sessionId)
+            api.sendCommand(_config.value, sessionId, command, arguments, directory)
+            loadSessionDetail(sessionId, directory)
             refreshSessions()
         }.onFailure {
             _error.value = it.message
         }
     }
 
-    suspend fun abortSession(sessionId: String) {
+    suspend fun abortSession(sessionId: String, directory: String?) {
         runCatching {
             api.abort(_config.value, sessionId)
-            loadSessionDetail(sessionId)
+            loadSessionDetail(sessionId, directory)
             refreshSessions()
         }.onFailure {
             _error.value = it.message
@@ -175,7 +175,7 @@ class OpencodeRepository(
         _error.value = null
     }
 
-    fun startEvents(sessionIdProvider: () -> String?) {
+    fun startEvents(sessionIdProvider: () -> Pair<String, String?>?) {
         eventsJob?.cancel()
         eventsJob = repoScope.launch {
             while (true) {
@@ -188,7 +188,9 @@ class OpencodeRepository(
                             type == "todo.updated"
                         ) {
                             repoScope.launch { refreshSessions() }
-                            sessionIdProvider()?.let { id -> repoScope.launch { loadSessionDetail(id) } }
+                            sessionIdProvider()?.let { (id, directory) ->
+                                repoScope.launch { loadSessionDetail(id, directory) }
+                            }
                         }
                     }
                 }.onFailure {

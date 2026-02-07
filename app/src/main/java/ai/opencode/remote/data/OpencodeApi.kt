@@ -13,7 +13,10 @@ import ai.opencode.remote.model.SessionStatusDto
 import ai.opencode.remote.model.SessionUpdateRequest
 import ai.opencode.remote.model.TodoItemDto
 import ai.opencode.remote.model.FileDiffDto
+import ai.opencode.remote.model.ValidationErrorDto
 import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -78,10 +81,18 @@ class OpencodeApi {
     suspend fun deleteSession(config: ServerConfig, id: String): Boolean =
         delete(config, "/session/$id")
 
-    suspend fun getMessages(config: ServerConfig, sessionId: String, limit: Int = 100): List<MessageEnvelopeDto> =
+    suspend fun getMessages(
+        config: ServerConfig,
+        sessionId: String,
+        limit: Int = 100,
+        directory: String? = null
+    ): List<MessageEnvelopeDto> =
         get(
             config,
-            "/session/$sessionId/message?limit=$limit",
+            "/session/$sessionId/message" + buildQuery(
+                "limit" to limit.toString(),
+                "directory" to directory
+            ),
             ListSerializer(MessageEnvelopeDto.serializer())
         )
 
@@ -91,19 +102,30 @@ class OpencodeApi {
     suspend fun getDiff(config: ServerConfig, sessionId: String): List<FileDiffDto> =
         get(config, "/session/$sessionId/diff", ListSerializer(FileDiffDto.serializer()))
 
-    suspend fun sendMessage(config: ServerConfig, sessionId: String, message: String): MessageEnvelopeDto =
+    suspend fun sendMessage(
+        config: ServerConfig,
+        sessionId: String,
+        message: String,
+        directory: String? = null
+    ): MessageEnvelopeDto =
         post(
             config,
-            "/session/$sessionId/message",
+            "/session/$sessionId/message" + buildQuery("directory" to directory),
             SendMessageRequest(parts = listOf(ai.opencode.remote.model.TextPartInput(text = message))),
             SendMessageRequest.serializer(),
             MessageEnvelopeDto.serializer()
         )
 
-    suspend fun sendCommand(config: ServerConfig, sessionId: String, command: String, arguments: String): MessageEnvelopeDto =
+    suspend fun sendCommand(
+        config: ServerConfig,
+        sessionId: String,
+        command: String,
+        arguments: String,
+        directory: String? = null
+    ): MessageEnvelopeDto =
         post(
             config,
-            "/session/$sessionId/command",
+            "/session/$sessionId/command" + buildQuery("directory" to directory),
             SendCommandRequest(command = command, arguments = arguments),
             SendCommandRequest.serializer(),
             MessageEnvelopeDto.serializer()
@@ -203,11 +225,31 @@ class OpencodeApi {
                 val err = runCatching {
                     json.decodeFromString(ErrorMessageDto.serializer(), payload)
                 }.getOrNull()
-                val message = err?.message ?: err?.name ?: "HTTP ${response.code}"
+                val validation = runCatching {
+                    json.decodeFromString(ValidationErrorDto.serializer(), payload)
+                }.getOrNull()
+                val validationDetails = validation?.errors
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.joinToString("; ") { it.toString() }
+                val message = err?.message
+                    ?: err?.name
+                    ?: validation?.data?.toString()
+                    ?: validationDetails
+                    ?: "HTTP ${response.code}"
                 throw IOException(message)
             }
             return json.decodeFromString(serializer, payload)
         }
+    }
+
+    private fun buildQuery(vararg pairs: Pair<String, String?>): String {
+        val active = pairs
+            .filter { !it.second.isNullOrBlank() }
+            .joinToString("&") { (key, value) ->
+                val encoded = URLEncoder.encode(value, StandardCharsets.UTF_8.toString())
+                "$key=$encoded"
+            }
+        return if (active.isBlank()) "" else "?$active"
     }
 
     private fun decodeGlobalEvent(payload: String): GlobalEventDto {

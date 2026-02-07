@@ -18,6 +18,7 @@ data class AppUiState(
     val config: ServerConfig = ServerConfig(),
     val sessions: List<SessionUi> = emptyList(),
     val selectedSessionId: String? = null,
+    val selectedSessionDirectory: String? = null,
     val messages: List<MessageUi> = emptyList(),
     val todos: List<TodoItemDto> = emptyList(),
     val diffFiles: Int = 0,
@@ -68,7 +69,11 @@ class AppViewModel(private val repository: OpencodeRepository) : ViewModel() {
             }
         }
 
-        repository.startEvents { _state.value.selectedSessionId }
+        repository.startEvents {
+            _state.value.selectedSessionId?.let { id ->
+                id to _state.value.selectedSessionDirectory
+            }
+        }
         refreshSessions()
     }
 
@@ -120,32 +125,36 @@ class AppViewModel(private val repository: OpencodeRepository) : ViewModel() {
     }
 
     fun openSession(sessionId: String) {
-        _state.update { it.copy(selectedSessionId = sessionId) }
+        val directory = _state.value.sessions.firstOrNull { it.id == sessionId }?.directory
+        _state.update { it.copy(selectedSessionId = sessionId, selectedSessionDirectory = directory) }
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            repository.loadSessionDetail(sessionId)
+            repository.loadSessionDetail(sessionId, directory)
             _state.update { it.copy(loading = false) }
         }
     }
 
     fun sendMessage(text: String) {
         val sessionId = _state.value.selectedSessionId ?: return
+        val directory = _state.value.selectedSessionDirectory
         viewModelScope.launch {
-            repository.sendMessage(sessionId, text)
+            repository.sendMessage(sessionId, text, directory)
         }
     }
 
     fun sendCommand(command: String, arguments: String) {
         val sessionId = _state.value.selectedSessionId ?: return
+        val directory = _state.value.selectedSessionDirectory
         viewModelScope.launch {
-            repository.sendCommand(sessionId, command, arguments)
+            repository.sendCommand(sessionId, command, arguments, directory)
         }
     }
 
     fun abortSession() {
         val sessionId = _state.value.selectedSessionId ?: return
+        val directory = _state.value.selectedSessionDirectory
         viewModelScope.launch {
-            repository.abortSession(sessionId)
+            repository.abortSession(sessionId, directory)
         }
     }
 

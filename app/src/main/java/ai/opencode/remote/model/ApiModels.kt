@@ -147,3 +147,10 @@ data class ErrorMessageDto(
     @SerialName("message") val message: String? = null,
     @SerialName("name") val name: String? = null
 )
+
+@Serializable
+data class ValidationErrorDto(
+    val success: Boolean? = null,
+    val data: JsonElement? = null,
+    val errors: List<JsonElement>? = null
+)
