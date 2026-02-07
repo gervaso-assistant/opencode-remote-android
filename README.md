@@ -1,42 +1,44 @@
 # OpenCode Remote (Android)
 
-App Android per controllare OpenCode in rete locale (LAN):
+Android app to control an OpenCode server running on your local network (LAN).
 
-- monitor sessioni attive e stato (`idle`, `busy`, `retry`)
-- vedere avanzamento (messaggi, todo, diff)
-- inviare prompt e slash command
-- interrompere una sessione in esecuzione
+## Features
 
-## Requisiti server
+- monitor active sessions and their status (`idle`, `busy`, `retry`)
+- track progress with messages, todos, and diff summary
+- send prompts and slash commands to a selected session
+- abort a running session from mobile
 
-Avvia OpenCode sul tuo PC in LAN:
+## Server Requirements
+
+Start OpenCode on your computer with Basic Auth enabled:
 
 ```bash
-OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD=la-tua-password opencode serve --hostname 0.0.0.0 --port 4096
+OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0 --port 4096
 ```
 
-Assicurati che telefono e PC siano sulla stessa rete Wi-Fi.
+Make sure your phone and computer are connected to the same Wi-Fi network.
 
-## Installazione APK da GitHub Actions
+## APK Build via GitHub Actions
 
-1. Carica questo progetto su GitHub.
-2. Apri tab **Actions** e avvia **Build Android APK**.
-3. Scarica artifact `opencode-remote-debug-apk`.
-4. Installa `app-debug.apk` sul telefono Android.
+1. Open the repository on GitHub.
+2. Go to **Actions** and run **Build Android APK** (or push to `main`).
+3. Download the `opencode-remote-debug-apk` artifact.
+4. Install `app-debug.apk` on your Android phone.
 
-Non serve installare Android SDK sul tuo PC.
+No Android SDK installation is required on your local machine.
 
-## Configurazione app
+## App Configuration
 
-Nella tab **Server** imposta:
+In the **Server** tab, set:
 
-- Host: IP LAN del PC (es. `192.168.1.20`)
-- Porta: `4096` (o quella che usi)
-- Username/password Basic Auth del server OpenCode
+- Host: your computer LAN IP (for example `192.168.1.20`)
+- Port: `4096` (or your custom OpenCode port)
+- Basic Auth username/password used by the OpenCode server
 
-Poi premi **Salva** e **Test connessione**.
+Then tap **Save** and **Test connection**.
 
-## Endpoints usati
+## API Endpoints Used
 
 - `/global/health`
 - `/event` (SSE)
