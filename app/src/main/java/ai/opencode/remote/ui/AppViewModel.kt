@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 
 data class AppUiState(
@@ -85,15 +86,22 @@ class AppViewModel(private val repository: OpencodeRepository) : ViewModel() {
     fun testConnection() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, connectionMessage = null) }
-            val result = repository.testConnection()
-            _state.update {
-                it.copy(
-                    loading = false,
-                    connectionMessage = result.fold(
-                        onSuccess = { version -> "Connesso. OpenCode v$version" },
-                        onFailure = { err -> "Connessione fallita: ${err.message}" }
+            try {
+                val result = withTimeout(12_000) { repository.testConnection() }
+                _state.update {
+                    it.copy(
+                        connectionMessage = result.fold(
+                            onSuccess = { version -> "Connesso. OpenCode v$version" },
+                            onFailure = { err -> "Connessione fallita: ${err.message}" }
+                        )
                     )
-                )
+                }
+            } catch (_: Exception) {
+                _state.update {
+                    it.copy(connectionMessage = "Connessione fallita: timeout")
+                }
+            } finally {
+                _state.update { it.copy(loading = false) }
             }
         }
     }
@@ -101,8 +109,11 @@ class AppViewModel(private val repository: OpencodeRepository) : ViewModel() {
     fun refreshSessions() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            repository.refreshSessions()
-            _state.update { it.copy(loading = false) }
+            try {
+                withTimeout(12_000) { repository.refreshSessions() }
+            } finally {
+                _state.update { it.copy(loading = false) }
+            }
         }
     }
 
@@ -129,8 +140,11 @@ class AppViewModel(private val repository: OpencodeRepository) : ViewModel() {
         _state.update { it.copy(selectedSessionId = sessionId, selectedSessionDirectory = directory) }
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            repository.loadSessionDetail(sessionId, directory)
-            _state.update { it.copy(loading = false) }
+            try {
+                withTimeout(12_000) { repository.loadSessionDetail(sessionId, directory) }
+            } finally {
+                _state.update { it.copy(loading = false) }
+            }
         }
     }
 

@@ -43,7 +43,14 @@ class OpencodeApi {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val sseClient = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
@@ -158,7 +165,7 @@ class OpencodeApi {
             .header("Accept", "text/event-stream")
             .build()
 
-        client.newCall(request).execute().use { response ->
+        sseClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("SSE failed with ${response.code}")
             }
