@@ -1,47 +1,84 @@
-# OpenCode Remote (Android)
+# OpenCode Remote (Web + Android APK)
 
-Android app to control an OpenCode server running on your local network (LAN).
+OpenCode Remote is now a web-first mobile UI built with React + Vite, then packaged as Android APK through Capacitor.
+
+This gives fast debugging during development and stable APK generation when needed.
 
 ## Features
 
-- monitor active sessions and their status (`idle`, `busy`, `retry`)
-- track progress with messages, todos, and diff summary
-- send prompts and slash commands to a selected session
-- abort a running session from mobile
+- manage local OpenCode server credentials and connection
+- list sessions with status (`idle`, `busy`, `retry`)
+- inspect session messages and todo items
+- send prompt text or slash commands to a selected session
+- abort a running session
+- mobile-first responsive layout (works in browser and Android WebView)
 
-## Server Requirements
+## Why Web-First
 
-Start OpenCode on your computer with Basic Auth enabled:
+- faster iteration: no APK rebuild for every bug fix
+- easier debugging with browser network/tools
+- same UI can run in browser and inside Android app
+- APK generated only when you want to install on device
+
+## Run Locally (Web)
 
 ```bash
-OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0 --port 4096
+cd web
+npm install
+npm run dev
 ```
 
-Make sure your phone and computer are connected to the same Wi-Fi network.
+Open the shown URL from your browser (or your phone on the same LAN).
 
-## APK Build via GitHub Actions
+## OpenCode Server Setup
 
-1. Open the repository on GitHub.
-2. Go to **Actions** and run **Build Android APK** (or push to `main`).
-3. Download the `opencode-remote-debug-apk` artifact.
-4. Install `app-debug.apk` on your Android phone.
+Start the OpenCode server with LAN access and Basic Auth.
 
-No Android SDK installation is required on your local machine.
+PowerShell example:
+
+```powershell
+$env:OPENCODE_SERVER_USERNAME="opencode"
+$env:OPENCODE_SERVER_PASSWORD="your-password"
+npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096 --cors http://localhost:5173
+```
+
+If you open the web UI from another host/IP, add corresponding `--cors` origins.
+
+## Android APK Build (Cloud, no local SDK required)
+
+1. Push to `main` or run workflow manually.
+2. Open GitHub Actions -> **Build Android APK**.
+3. Download artifact `opencode-remote-debug-apk`.
+4. Install `app-debug.apk` on Android.
+
+The workflow does this automatically:
+
+- builds the React app
+- creates Capacitor Android project
+- compiles debug APK with Gradle
+
+## Manual Android Packaging (Optional)
+
+```bash
+cd web
+npm run build
+npx cap add android
+npx cap sync android
+```
+
+Then open `web/android` in Android Studio if you want local native debugging.
 
 ## App Configuration
 
-In the **Server** tab, set:
+Use your LAN server values:
 
-- Host: your computer LAN IP (for example `192.168.1.20`)
-- Port: `4096` (or your custom OpenCode port)
-- Basic Auth username/password used by the OpenCode server
+- Host: computer LAN IP (for example `192.168.1.20`)
+- Port: `4096`
+- Username/password: Basic Auth credentials used to start OpenCode server
 
-Then tap **Save** and **Test connection**.
-
-## API Endpoints Used
+## Main Endpoints Used
 
 - `/global/health`
-- `/event` (SSE)
 - `/session`, `/session/status`, `/session/:id`
 - `/session/:id/message`, `/session/:id/command`, `/session/:id/abort`
 - `/session/:id/todo`, `/session/:id/diff`
