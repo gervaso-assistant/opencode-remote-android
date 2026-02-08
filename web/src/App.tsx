@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "./api"
 import type { CommandInfo, MessageEnvelope, ServerConfig, SessionView, TodoItem } from "./types"
 
@@ -91,6 +91,7 @@ function App() {
   const [busySending, setBusySending] = useState(false)
   const [statusMessage, setStatusMessage] = useState("Idle")
   const [error, setError] = useState<string | null>(null)
+  const messagesRef = useRef<HTMLDivElement | null>(null)
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedID) ?? null,
@@ -104,6 +105,12 @@ function App() {
       return session.title.toLowerCase().includes(text) || session.directory.toLowerCase().includes(text)
     })
   }, [sessions, query])
+
+  const renderedMessages = useMemo(() => {
+    return messages
+      .map((message) => ({ ...message, text: extractText(message) }))
+      .filter((message) => message.text)
+  }, [messages])
 
   const hasConfiguredServer = Boolean(config.host && config.port > 0)
 
@@ -190,6 +197,7 @@ function App() {
     if (!selectedSession) return
     const text = composer.trim()
     if (!text) return
+    setComposer("")
 
     setBusySending(true)
     setError(null)
@@ -203,7 +211,6 @@ function App() {
       } else {
         await api.sendPrompt(config, selectedSession.id, text, selectedSession.directory)
       }
-      setComposer("")
       await loadSelected(selectedSession.id, selectedSession.directory)
       await refreshSessions()
     } catch (err) {
@@ -257,6 +264,13 @@ function App() {
       setView("settings")
     }
   }, [hasConfiguredServer])
+
+  useEffect(() => {
+    if (view !== "detail") return
+    const container = messagesRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [view, renderedMessages.length, busySending])
 
   return (
     <div className="app-shell">
@@ -401,11 +415,8 @@ function App() {
             ))}
           </div>
 
-          <div className="messages">
-            {messages
-              .map((message) => ({ ...message, text: extractText(message) }))
-              .filter((message) => message.text)
-              .map((message) => {
+          <div className="messages" ref={messagesRef}>
+            {renderedMessages.map((message) => {
                 const lines = toDisplayLines(message.text)
                 const listMode = lines.filter((line) => line.startsWith("- ")).length >= 2
                 return (
