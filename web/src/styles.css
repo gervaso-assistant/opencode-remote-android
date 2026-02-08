@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
-  background: radial-gradient(circle at top right, #e3f2fd 0%, #f7f9fc 45%, #eef2f7 100%);
+  background: radial-gradient(circle at top right, #dbeafe 0%, #f7f9fc 45%, #ecfeff 100%);
   color: #0f172a;
 }
 
@@ -15,47 +15,46 @@ body {
 }
 
 .app-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 14px;
   display: grid;
-  grid-template-columns: 320px 360px 1fr;
-  gap: 14px;
-  min-height: 100vh;
-  padding: 16px;
+  gap: 12px;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 18px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
   padding: 14px;
-  overflow: hidden;
 }
 
 h1,
 h2,
-p {
+h3,
+p,
+ul {
   margin: 0;
 }
 
 h1 {
-  font-size: 1.5rem;
-  margin-bottom: 6px;
+  font-size: 1.45rem;
 }
 
 h2 {
   font-size: 1.1rem;
 }
 
+h3 {
+  margin-top: 14px;
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
 .subtle {
   color: #64748b;
   font-size: 0.9rem;
-}
-
-.settings label {
-  display: block;
-  margin-top: 10px;
-  font-weight: 600;
-  font-size: 0.85rem;
 }
 
 input,
@@ -82,7 +81,7 @@ textarea {
 button {
   border: none;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   background: linear-gradient(120deg, #1d4ed8, #2563eb);
   color: #fff;
   font-weight: 700;
@@ -97,9 +96,32 @@ button.danger {
   background: #be123c;
 }
 
+button.active {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.top-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.tab-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings label {
+  display: block;
+  margin-top: 10px;
+  font-weight: 600;
+  font-size: 0.86rem;
 }
 
 .actions {
@@ -110,17 +132,17 @@ button:disabled {
 }
 
 .status {
-  margin-top: 12px;
+  margin-top: 10px;
   color: #0f766e;
 }
 
 .error {
-  margin-top: 8px;
+  margin-top: 10px;
   color: #be123c;
   background: #ffe4e6;
   border-radius: 8px;
   padding: 8px;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
 }
 
 .header-row {
@@ -128,6 +150,11 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+}
+
+.inline-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .search {
@@ -139,16 +166,15 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: calc(100vh - 180px);
+  max-height: 62vh;
   overflow: auto;
 }
 
 .session-card {
-  width: 100%;
-  text-align: left;
-  background: #f8fafc;
-  color: #0f172a;
+  border-radius: 12px;
   border: 1px solid #dbeafe;
+  background: #f8fafc;
+  padding: 10px;
 }
 
 .session-card.active {
@@ -169,7 +195,6 @@ button:disabled {
   padding: 3px 8px;
   font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
 }
 
 .pill.busy {
@@ -192,7 +217,7 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   overflow: auto;
-  max-height: calc(100vh - 395px);
+  max-height: 48vh;
   margin-top: 12px;
 }
 
@@ -216,6 +241,21 @@ button:disabled {
   background: #f8fafc;
 }
 
+.message p,
+.message li {
+  margin-top: 4px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.message code {
+  background: #e2e8f0;
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.88em;
+}
+
 .todo-box {
   margin-top: 12px;
   border-radius: 12px;
@@ -231,43 +271,38 @@ button:disabled {
   font-size: 0.85rem;
 }
 
-.composer-mode {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.composer-mode button {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.composer-mode button.active {
-  background: #1d4ed8;
-  color: #fff;
-}
-
 .composer {
-  margin-top: 8px;
+  margin-top: 10px;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: end;
 }
 
-@media (max-width: 1160px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-    padding: 12px;
+.help ul {
+  margin-top: 8px;
+  padding-left: 20px;
+}
+
+.help li {
+  margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .tab-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .session-list,
   .messages {
-    max-height: 320px;
+    max-height: 44vh;
   }
 
   .composer {
     grid-template-columns: 1fr;
+  }
+
+  .inline-actions {
+    flex-wrap: wrap;
   }
 }

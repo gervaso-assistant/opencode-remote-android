@@ -72,3 +72,8 @@ export type SessionView = {
   additions: number
   deletions: number
 }
+
+export type CommandInfo = {
+  name: string
+  description?: string
+}

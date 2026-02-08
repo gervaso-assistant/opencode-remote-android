@@ -78,11 +78,13 @@ Then open `web/android` in Android Studio if you want local native debugging.
 
 ## App Configuration
 
-Use your LAN server values:
+Use your server values:
 
 - Host: computer LAN IP (for example `192.168.1.20`)
 - Port: `4096`
 - Username/password: Basic Auth credentials used to start OpenCode server
+
+The app is not limited to LAN. You can also use it over WAN/VPN if your network routing (NAT/firewall) and security setup are configured correctly.
 
 ## Main Endpoints Used
 

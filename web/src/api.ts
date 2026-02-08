@@ -1,5 +1,6 @@
 import { Capacitor, CapacitorHttp } from "@capacitor/core"
 import type {
+  CommandInfo,
   DiffFile,
   HealthResponse,
   MessageEnvelope,
@@ -113,6 +114,10 @@ export const api = {
 
   listStatuses(config: ServerConfig) {
     return request<Record<string, SessionStatus>>(config, "/session/status")
+  },
+
+  listCommands(config: ServerConfig) {
+    return request<CommandInfo[]>(config, "/command")
   },
 
   createSession(config: ServerConfig, title?: string) {
