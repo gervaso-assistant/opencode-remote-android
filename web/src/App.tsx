@@ -10,14 +10,12 @@ import {
   PlayIcon,
   TrashIcon,
   StopIcon,
-  SendIcon,
   SaveIcon,
   TestIcon,
   LoadingIcon,
   WaitingIcon,
   RocketIcon,
-  MenuIcon,
-  CloseIcon
+  MenuIcon
 } from "./Icons"
 
 const STORAGE_KEY = "opencode.remote.server"
@@ -550,7 +548,7 @@ function App() {
           <div className="session-list">
             {filteredSessions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--secondary-500)' }}>
-                <FolderIcon size={48} style={{ opacity: 0.3, margin: '0 auto var(--space-4)' }} />
+                <FolderIcon size={48} className="icon-empty-state" />
                 <p>No sessions found</p>
                 <p className="subtle">Create a new session to get started</p>
               </div>
@@ -613,7 +611,7 @@ function App() {
               <h2>
                 {selectedSession ? (
                   <>
-                    <ChatIcon size={24} style={{ marginRight: 'var(--space-2)', verticalAlign: 'middle' }} />
+                    <ChatIcon size={24} className="icon-inline-heading" />
                     {selectedSession.title}
                   </>
                 ) : (
@@ -678,7 +676,7 @@ function App() {
           <div className="messages" ref={messagesRef}>
             {renderedMessages.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--secondary-500)' }}>
-                <ChatIcon size={48} style={{ opacity: 0.3, margin: '0 auto var(--space-4)' }} />
+                <ChatIcon size={48} className="icon-empty-state" />
                 <p>No messages yet</p>
                 <p className="subtle">Start a conversation below</p>
               </div>
@@ -743,7 +741,7 @@ function App() {
       {view === "help" && (
         <section className="panel help fade-in">
           <h2>
-            <HelpIcon size={24} style={{ marginRight: 'var(--space-2)', verticalAlign: 'middle' }} />
+            <HelpIcon size={24} className="icon-inline-heading" />
             Help & Documentation
           </h2>
           <div className="help-tabs" role="tablist">
@@ -920,7 +918,7 @@ http://YOUR_PC_IP:4096/global/health</pre>
               
               {commands.length === 0 ? (
                 <div className="no-commands">
-                  <HelpIcon size={48} style={{ opacity: 0.3, margin: '0 auto var(--space-4)' }} />
+                  <HelpIcon size={48} className="icon-empty-state" />
                   <p className="subtle">No commands available</p>
                   <p className="subtle">Connect to a server to see available commands</p>
                 </div>

@@ -358,6 +358,17 @@ button:disabled {
   display: block;
 }
 
+.icon-inline-heading {
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
+.icon-empty-state {
+  opacity: 0.3;
+  margin: 0 auto var(--space-4);
+  display: block;
+}
+
 .mobile-menu-btn {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid var(--secondary-200);
