@@ -25,12 +25,34 @@ function extractText(msg: MessageEnvelope): string {
 }
 
 function renderInline(text: string) {
-  const chunks = text.split(/(`[^`]+`)/g)
-  return chunks.map((chunk, index) => {
+  const codeChunks = text.split(/(`[^`]+`)/g)
+  return codeChunks.map((chunk, index) => {
     if (chunk.startsWith("`") && chunk.endsWith("`")) {
-      return <code key={index}>{chunk.slice(1, -1)}</code>
+      return <code key={`code-${index}`}>{chunk.slice(1, -1)}</code>
     }
-    return <span key={index}>{chunk}</span>
+
+    const nodes = []
+    const boldPattern = /\*\*(.+?)\*\*/g
+    let cursor = 0
+    let match: RegExpExecArray | null = boldPattern.exec(chunk)
+
+    while (match) {
+      if (match.index > cursor) {
+        nodes.push(<span key={`text-${index}-${cursor}`}>{chunk.slice(cursor, match.index)}</span>)
+      }
+      nodes.push(<strong key={`bold-${index}-${match.index}`}>{match[1]}</strong>)
+      cursor = match.index + match[0].length
+      match = boldPattern.exec(chunk)
+    }
+
+    if (cursor < chunk.length) {
+      nodes.push(<span key={`tail-${index}-${cursor}`}>{chunk.slice(cursor)}</span>)
+    }
+
+    if (nodes.length === 0) {
+      return <span key={`empty-${index}`}>{chunk}</span>
+    }
+    return <span key={`inline-${index}`}>{nodes}</span>
   })
 }
 
