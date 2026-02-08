@@ -654,6 +654,8 @@ button:disabled {
   border: 1px solid var(--secondary-200);
   background: rgba(255, 255, 255, 0.8);
   padding: var(--space-4);
+  height: auto;
+  flex: 0 0 auto;
   transition: all var(--transition-normal);
   cursor: pointer;
   backdrop-filter: blur(10px);
@@ -1219,6 +1221,7 @@ textarea:focus-visible {
 .session-stats {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-3);
   margin-top: var(--space-2);
   font-size: 0.875rem;
