@@ -1,10 +1,5 @@
-*.iml
-.gradle/
-local.properties
 .idea/
 build/
-app/build/
-captures/
 web/node_modules/
 web/dist/
 web/android/
