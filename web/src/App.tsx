@@ -13,7 +13,6 @@ import {
   SaveIcon,
   TestIcon,
   LoadingIcon,
-  WaitingIcon,
   RocketIcon,
   MenuIcon
 } from "./Icons"
@@ -111,6 +110,7 @@ function App() {
   const [query, setQuery] = useState("")
   const [composer, setComposer] = useState("")
   const [busySending, setBusySending] = useState(false)
+  const [loadingSessionID, setLoadingSessionID] = useState<string | null>(null)
   const [testingConnection, setTestingConnection] = useState(false)
   const [settingsNotice, setSettingsNotice] = useState<{ type: NoticeType; text: string } | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
@@ -139,6 +139,18 @@ function App() {
 
   const hasConfiguredServer = Boolean(config.host && config.port > 0)
   const isSessionRunning = Boolean(selectedSession && ["busy", "retry"].includes(selectedSession.status))
+  const isWorking = busySending || isSessionRunning
+
+  async function openSession(sessionID: string, directory: string) {
+    setSelectedID(sessionID)
+    setMessages([])
+    setTodos([])
+    setRuntimeError(null)
+    setView("detail")
+    setLoadingSessionID(sessionID)
+    await loadSelected(sessionID, directory)
+    setLoadingSessionID((activeID) => (activeID === sessionID ? null : activeID))
+  }
 
   function saveConfig() {
     setConfig(draftConfig)
@@ -577,11 +589,7 @@ function App() {
                   </div>
                   <div className="inline-actions">
                     <button
-                      onClick={() => {
-                        setSelectedID(session.id)
-                        loadSelected(session.id, session.directory).catch(() => undefined)
-                        setView("detail")
-                      }}
+                      onClick={() => openSession(session.id, session.directory).catch(() => undefined)}
                       className="btn-primary"
                     >
                       <PlayIcon size={16} />
@@ -606,8 +614,8 @@ function App() {
 
       {view === "detail" && (
         <main className="panel detail fade-in">
-          <div className="header-row">
-            <div>
+            <div className="header-row">
+              <div>
               <h2>
                 {selectedSession ? (
                   <>
@@ -622,22 +630,9 @@ function App() {
                 <p className="subtle">
                   {selectedSession.directory} • Updated {formatTime(selectedSession.updated)}
                 </p>
-              )}
+                )}
+              </div>
             </div>
-            {isSessionRunning && (
-              <button className="btn-danger" onClick={abortSession} disabled={!selectedSession}>
-                <StopIcon size={18} />
-                Stop Session
-              </button>
-            )}
-          </div>
-
-          {(isSessionRunning || busySending) && (
-            <div className="running-banner fade-in">
-              <WaitingIcon size={16} />
-              OpenCode is processing your request...
-            </div>
-          )}
 
           <div className="todo-box">
             <div className="todo-header-row">
@@ -674,7 +669,12 @@ function App() {
           </div>
 
           <div className="messages" ref={messagesRef}>
-            {renderedMessages.length === 0 ? (
+            {loadingSessionID === selectedID ? (
+              <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--secondary-500)' }}>
+                <LoadingIcon size={32} />
+                <p>Loading session...</p>
+              </div>
+            ) : renderedMessages.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--secondary-500)' }}>
                 <ChatIcon size={48} className="icon-empty-state" />
                 <p>No messages yet</p>
@@ -710,19 +710,21 @@ function App() {
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
-                  send().catch(() => undefined)
+                  if (!isWorking) {
+                    send().catch(() => undefined)
+                  }
                 }
               }}
-              disabled={!selectedSession || busySending || isSessionRunning}
+              disabled={!selectedSession || isWorking}
             />
             <button 
-              onClick={send} 
-              disabled={!selectedSession || busySending || isSessionRunning}
-              className="btn-primary"
+              onClick={isWorking ? abortSession : send}
+              disabled={!selectedSession}
+              className={isWorking ? "btn-danger" : "btn-primary"}
             >
-              {busySending || isSessionRunning ? (
+              {isWorking ? (
                 <>
-                  <LoadingIcon size={18} />
+                  <StopIcon size={18} />
                   Waiting...
                 </>
               ) : (
