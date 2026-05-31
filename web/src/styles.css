@@ -217,13 +217,13 @@ p {
 }
 
 /* Form Elements */
-input, textarea, button {
+input, textarea, select, button {
   font-family: inherit;
   font-size: 0.875rem;
   transition: all var(--transition-fast);
 }
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 2px solid transparent;
   background: rgba(255, 255, 255, 0.8);
@@ -235,7 +235,7 @@ input, textarea {
   transition: all var(--transition-fast);
 }
 
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--primary-400);
   background: rgba(255, 255, 255, 0.95);
@@ -1192,7 +1192,8 @@ button:disabled {
 /* Enhanced Accessibility */
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--primary-500);
   outline-offset: 2px;
 }

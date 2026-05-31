@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "./api"
+import { createTranslator, languageOptions, normalizeLanguage, type LanguageCode } from "./i18n"
 import type { CommandInfo, MessageEnvelope, ServerConfig, SessionView, TodoItem } from "./types"
 import {
   SettingsIcon,
@@ -18,6 +19,7 @@ import {
 } from "./Icons"
 
 const STORAGE_KEY = "opencode.remote.server"
+const LANGUAGE_STORAGE_KEY = "opencode.remote.language"
 
 const defaultConfig: ServerConfig = {
   host: "",
@@ -91,6 +93,10 @@ function App() {
       return defaultConfig
     }
   })
+  const [language, setLanguage] = useState<LanguageCode>(() => {
+    return normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY) || navigator.language)
+  })
+  const t = useMemo(() => createTranslator(language), [language])
 
   const [draftConfig, setDraftConfig] = useState<ServerConfig>(config)
   const [connectedVersion, setConnectedVersion] = useState<string>("")
@@ -157,7 +163,7 @@ function App() {
   function saveConfig() {
     setConfig(draftConfig)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draftConfig))
-    setSettingsNotice({ type: "success", text: "Configuration saved. Press Test to validate connectivity." })
+    setSettingsNotice({ type: "success", text: t('settings.saved') })
     setRuntimeError(null)
     if (draftConfig.host && draftConfig.port > 0) {
       setView("sessions")
@@ -166,7 +172,7 @@ function App() {
 
   async function testConnection(configToTest: ServerConfig) {
     setTestingConnection(true)
-    setSettingsNotice({ type: "info", text: "Testing connection..." })
+    setSettingsNotice({ type: "info", text: t('settings.testingConnection') })
     try {
       const health = await Promise.race([
         api.health(configToTest),
@@ -176,9 +182,9 @@ function App() {
       setConfig(configToTest)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(configToTest))
       setView("sessions")
-      setSettingsNotice({ type: "success", text: `Connected to OpenCode ${health.version}. Configuration saved.` })
+      setSettingsNotice({ type: "success", text: t('settings.connectedSaved', { version: health.version }) })
     } catch (err) {
-      setSettingsNotice({ type: "error", text: `Connection failed: ${(err as Error).message}` })
+      setSettingsNotice({ type: "error", text: t('settings.connectionFailed', { message: (err as Error).message }) })
     } finally {
       setTestingConnection(false)
     }
@@ -303,6 +309,10 @@ function App() {
   }
 
   useEffect(() => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language)
+  }, [language])
+
+  useEffect(() => {
     if (!config.host || config.port <= 0) return
     refreshSessions(true).catch(() => undefined)
     loadCommands().catch(() => undefined)
@@ -357,7 +367,7 @@ function App() {
         <div className="brand-section">
           <div className="brand-title">
             <img src="/app-icon.png" alt="" className="app-icon" />
-            <h1>OpenCode Remote</h1>
+            <h1>{t('app.title')}</h1>
           </div>
         </div>
         
@@ -369,7 +379,7 @@ function App() {
             aria-label="Settings"
           >
             <SettingsIcon size={18} />
-            <span>Settings</span>
+            <span>{t('nav.settings')}</span>
           </button>
           <button
             className={view === "sessions" ? "active" : ""}
@@ -378,7 +388,7 @@ function App() {
             aria-label="Sessions"
           >
             <FolderIcon size={18} />
-            <span>Sessions</span>
+            <span>{t('nav.sessions')}</span>
           </button>
           <button
             className={view === "detail" ? "active" : ""}
@@ -387,7 +397,7 @@ function App() {
             aria-label="Detail"
           >
             <ChatIcon size={18} />
-            <span>Detail</span>
+            <span>{t('nav.detail')}</span>
           </button>
           <button 
             className={view === "help" ? "active" : ""} 
@@ -395,7 +405,7 @@ function App() {
             aria-label="Help"
           >
             <HelpIcon size={18} />
-            <span>Help</span>
+            <span>{t('nav.help')}</span>
           </button>
         </nav>
 
@@ -411,7 +421,7 @@ function App() {
 
       {view === "menu" && (
         <section className="panel menu-panel fade-in">
-          <h2>Menu</h2>
+          <h2>{t('menu.title')}</h2>
           <div className="menu-grid">
             <button 
               className="menu-item"
@@ -419,8 +429,8 @@ function App() {
               aria-label="Settings"
             >
               <SettingsIcon size={28} />
-              <span>Settings</span>
-              <small>Configure server connection</small>
+              <span>{t('nav.settings')}</span>
+              <small>{t('menu.settingsDescription')}</small>
             </button>
             
             <button
@@ -430,8 +440,8 @@ function App() {
               aria-label="Sessions"
             >
               <FolderIcon size={28} />
-              <span>Sessions</span>
-              <small>Manage your sessions</small>
+              <span>{t('nav.sessions')}</span>
+              <small>{t('menu.sessionsDescription')}</small>
             </button>
             
             <button
@@ -441,8 +451,8 @@ function App() {
               aria-label="Detail"
             >
               <ChatIcon size={28} />
-              <span>Detail</span>
-              <small>Chat with OpenCode</small>
+              <span>{t('nav.detail')}</span>
+              <small>{t('menu.detailDescription')}</small>
             </button>
             
             <button 
@@ -451,8 +461,8 @@ function App() {
               aria-label="Help"
             >
               <HelpIcon size={28} />
-              <span>Help</span>
-              <small>Documentation & support</small>
+              <span>{t('nav.help')}</span>
+              <small>{t('menu.helpDescription')}</small>
             </button>
           </div>
         </section>
@@ -460,20 +470,33 @@ function App() {
 
       {view === "settings" && (
         <section className="panel settings fade-in">
-          <h2>Server Configuration</h2>
+          <h2>{t('settings.title')}</h2>
+
+          <label htmlFor="language">
+            {t('settings.language')}
+            <select
+              id="language"
+              value={language}
+              onChange={(event) => setLanguage(normalizeLanguage(event.target.value))}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.code} value={option.code}>{option.label}</option>
+              ))}
+            </select>
+          </label>
           
           <label htmlFor="host">
-            Host Address
+            {t('settings.host')}
             <input 
               id="host"
               value={draftConfig.host} 
               onChange={(event) => setDraftConfig({ ...draftConfig, host: event.target.value })} 
-              placeholder="192.168.1.100 or localhost"
+              placeholder={t('settings.hostPlaceholder')}
             />
           </label>
           
           <label htmlFor="port">
-            Port
+            {t('settings.port')}
             <input
               id="port"
               type="number"
@@ -484,7 +507,7 @@ function App() {
           </label>
           
           <label htmlFor="username">
-            Username
+            {t('settings.username')}
             <input
               id="username"
               value={draftConfig.username}
@@ -494,13 +517,13 @@ function App() {
           </label>
           
           <label htmlFor="password">
-            Password
+            {t('settings.password')}
             <input
               id="password"
               type="password"
               value={draftConfig.password}
               onChange={(event) => setDraftConfig({ ...draftConfig, password: event.target.value })}
-              placeholder="Optional; leave blank for unsecured local server"
+              placeholder={t('settings.passwordPlaceholder')}
             />
           </label>
           
@@ -511,7 +534,7 @@ function App() {
               className="btn-primary"
             >
               <SaveIcon size={18} />
-              {testingConnection ? "Saving..." : "Save Configuration"}
+              {testingConnection ? t('settings.saving') : t('settings.save')}
             </button>
             <button 
               onClick={() => testConnection(draftConfig)} 
@@ -521,12 +544,12 @@ function App() {
               {testingConnection ? (
                 <>
                   <LoadingIcon size={18} />
-                  Testing...
+                  {t('settings.testing')}
                 </>
               ) : (
                 <>
                   <TestIcon size={18} />
-                  Test Connection
+                  {t('settings.test')}
                 </>
               )}
             </button>
@@ -544,7 +567,7 @@ function App() {
           {connectedVersion && (
             <div className="notice success fade-in">
               <TestIcon size={16} />
-              Connected to OpenCode {connectedVersion}
+              {t('settings.connectedTo', { version: connectedVersion })}
             </div>
           )}
         </section>
@@ -553,21 +576,21 @@ function App() {
       {view === "sessions" && (
         <section className="panel sessions fade-in">
           <div className="header-row">
-            <h2>Sessions</h2>
+            <h2>{t('sessions.title')}</h2>
             <div className="inline-actions">
               <button onClick={() => refreshSessions()} className="btn-secondary">
                 <LoadingIcon size={18} />
-                Refresh
+                {t('sessions.refresh')}
               </button>
               <button onClick={createSession} className="btn-primary" disabled={creatingSession}>
                 {creatingSession ? <LoadingIcon size={18} /> : <PlusIcon size={18} />}
-                {creatingSession ? "Creating..." : "New Session"}
+                {creatingSession ? t('sessions.creating') : t('sessions.new')}
               </button>
             </div>
           </div>
           
           <input
-            placeholder="Search sessions by title or directory..."
+            placeholder={t('sessions.searchPlaceholder')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="search"
@@ -577,8 +600,8 @@ function App() {
             {filteredSessions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--secondary-500)' }}>
                 <FolderIcon size={48} className="icon-empty-state" />
-                <p>No sessions found</p>
-                <p className="subtle">Create a new session to get started</p>
+                <p>{t('sessions.emptyTitle')}</p>
+                <p className="subtle">{t('sessions.emptyHint')}</p>
               </div>
             ) : (
               filteredSessions.map((session) => (
@@ -608,9 +631,9 @@ function App() {
                         <strong style={{ color: 'var(--accent-600)' }}> -{session.deletions}</strong>
                       </span>
                     ) : (
-                      <span className="subtle">No file changes</span>
+                      <span className="subtle">{t('sessions.noFileChanges')}</span>
                     )}
-                    <span className="subtle">• Updated {formatTime(session.updated)}</span>
+                    <span className="subtle">• {t('sessions.updated', { time: formatTime(session.updated) })}</span>
                   </div>
                   <div className="inline-actions">
                     <button
@@ -621,7 +644,7 @@ function App() {
                       className="btn-primary"
                     >
                       <PlayIcon size={16} />
-                      Open
+                      {t('sessions.open')}
                     </button>
                     <button 
                       className="btn-danger" 
@@ -631,7 +654,7 @@ function App() {
                       }}
                     >
                       <TrashIcon size={16} />
-                      Delete
+                      {t('sessions.delete')}
                     </button>
                   </div>
                 </article>
@@ -646,7 +669,7 @@ function App() {
       {view === "detail" && (
         <main className="panel detail fade-in">
           <div className="detail-topbar">
-            <button className="btn-secondary" onClick={() => setView("sessions")}>← Sessions</button>
+            <button className="btn-secondary" onClick={() => setView("sessions")}>{t('detail.backToSessions')}</button>
             {selectedSession && (
               <span className={`pill ${selectedSession.status}`}>{selectedSession.status}</span>
             )}
@@ -660,12 +683,12 @@ function App() {
                     {selectedSession.title}
                   </>
                 ) : (
-                  "Select a session"
+                  t('detail.selectSession')
                 )}
               </h2>
               {selectedSession && (
                 <p className="subtle">
-                  {selectedSession.directory} • Updated {formatTime(selectedSession.updated)}
+                  {selectedSession.directory} • {t('sessions.updated', { time: formatTime(selectedSession.updated) })}
                 </p>
                 )}
               </div>
@@ -676,7 +699,7 @@ function App() {
               <div className="todo-header-row">
                 <h3>
                   <span style={{ marginRight: 'var(--space-2)' }}>📋</span>
-                  Todo Items
+                  {t('todo.title')}
                 </h3>
                 <button
                   type="button"
@@ -685,7 +708,7 @@ function App() {
                   aria-expanded={todosExpanded}
                   aria-controls="todo-items-content"
                 >
-                  {todosExpanded ? "Hide" : "Show"}
+                  {todosExpanded ? t('todo.hide') : t('todo.show')}
                 </button>
               </div>
               {todosExpanded && (
@@ -707,13 +730,13 @@ function App() {
             {loadingSessionID === selectedID ? (
               <div className="empty-state compact">
                 <LoadingIcon size={32} />
-                <p>Loading session...</p>
+                <p>{t('detail.loading')}</p>
               </div>
             ) : renderedMessages.length === 0 ? (
               <div className="empty-state compact">
                 <ChatIcon size={40} className="icon-empty-state" />
-                <p>No messages yet</p>
-                <p className="subtle">Start a conversation below</p>
+                <p>{t('detail.emptyTitle')}</p>
+                <p className="subtle">{t('detail.emptyHint')}</p>
               </div>
             ) : (
               renderedMessages.map((message) => {
@@ -722,7 +745,7 @@ function App() {
                   <article key={message.info.id} className={`message ${message.info.role} fade-in`}>
                     <header>
                       <strong>
-                        {message.info.role === "user" ? "👤 You" : "🤖 OpenCode"}
+                        {message.info.role === "user" ? t('detail.you') : t('detail.opencode')}
                       </strong>
                       <small>{formatTime(message.info.time.created)}</small>
                     </header>
@@ -741,7 +764,7 @@ function App() {
             <textarea
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
-              placeholder="Type a prompt or command (start with / for slash commands)..."
+              placeholder={t('detail.composerPlaceholder')}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
@@ -760,12 +783,12 @@ function App() {
               {isWorking ? (
                 <>
                   <StopIcon size={18} />
-                  Waiting...
+                  {t('detail.waiting')}
                 </>
               ) : (
                 <>
                   <RocketIcon size={18} />
-                  Send
+                  {t('detail.send')}
                 </>
               )}
             </button>
@@ -784,18 +807,18 @@ function App() {
             aria-labelledby="delete-session-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 id="delete-session-title">Delete session?</h2>
+            <h2 id="delete-session-title">{t('session.deleteTitle')}</h2>
             <p>
-              This will permanently delete <strong>{sessionToDelete.title}</strong>.
+              {t('session.deleteBodyPrefix')} <strong>{sessionToDelete.title}</strong>.
             </p>
             <p className="subtle">{sessionToDelete.directory}</p>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setSessionToDelete(null)}>
-                Cancel
+                {t('session.cancel')}
               </button>
               <button className="btn-danger" onClick={() => deleteSession(sessionToDelete.id)}>
                 <TrashIcon size={16} />
-                Delete session
+                {t('session.deleteConfirm')}
               </button>
             </div>
           </section>
@@ -806,7 +829,7 @@ function App() {
         <section className="panel help fade-in">
           <h2>
             <HelpIcon size={24} className="icon-inline-heading" />
-            Help & Documentation
+            {t('help.title')}
           </h2>
           <div className="help-tabs" role="tablist">
             <button 
@@ -815,7 +838,7 @@ function App() {
               role="tab"
               aria-selected={helpPage === "overview"}
             >
-              Overview
+              {t('help.overview')}
             </button>
             <button 
               className={helpPage === "server" ? "active" : ""} 
@@ -823,7 +846,7 @@ function App() {
               role="tab"
               aria-selected={helpPage === "server"}
             >
-              Server
+              {t('help.server')}
             </button>
             <button 
               className={helpPage === "network" ? "active" : ""} 
@@ -831,7 +854,7 @@ function App() {
               role="tab"
               aria-selected={helpPage === "network"}
             >
-              Network
+              {t('help.network')}
             </button>
             <button 
               className={helpPage === "troubleshooting" ? "active" : ""} 
@@ -839,7 +862,7 @@ function App() {
               role="tab"
               aria-selected={helpPage === "troubleshooting"}
             >
-              Troubleshooting
+              {t('help.troubleshooting')}
             </button>
             <button 
               className={helpPage === "commands" ? "active" : ""} 
@@ -847,7 +870,7 @@ function App() {
               role="tab"
               aria-selected={helpPage === "commands"}
             >
-              Commands
+              {t('help.commands')}
             </button>
           </div>
 
