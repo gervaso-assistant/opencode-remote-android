@@ -10,6 +10,23 @@ export type HealthResponse = {
   version: string
 }
 
+export type ModelSelection = {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+
+export type ModelOption = ModelSelection & {
+  providerName: string
+  modelName: string
+  status?: string
+  contextLimit?: number
+  outputLimit?: number
+  tools?: boolean
+  attachments?: boolean
+  isDefault?: boolean
+}
+
 export type Session = {
   id: string
   title: string
@@ -22,6 +39,11 @@ export type Session = {
     additions: number
     deletions: number
     files: number
+  }
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
   }
 }
 
@@ -97,6 +119,7 @@ export type SessionView = {
   files: number
   additions: number
   deletions: number
+  model?: ModelSelection
 }
 
 export type CommandInfo = {

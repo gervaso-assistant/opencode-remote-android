@@ -5,6 +5,8 @@ import type {
   FileStatusEntry,
   HealthResponse,
   MessageEnvelope,
+  ModelOption,
+  ModelSelection,
   ProjectCurrent,
   ServerConfig,
   Session,
@@ -30,6 +32,29 @@ function withDirectory(path: string, directory?: string): string {
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE"
   body?: unknown
+}
+
+type ConfigProvidersResponse = {
+  providers: Array<{
+    id: string
+    name: string
+    models: Record<string, {
+      id?: string
+      name?: string
+      status?: string
+      capabilities?: {
+        attachment?: boolean
+        toolcall?: boolean
+        tools?: boolean
+      }
+      limit?: {
+        context?: number
+        output?: number
+      }
+      variants?: Record<string, unknown>
+    }>
+  }>
+  default?: Record<string, string>
 }
 
 async function request<T>(config: ServerConfig, path: string, options: RequestOptions = {}): Promise<T> {
@@ -106,6 +131,21 @@ async function request<T>(config: ServerConfig, path: string, options: RequestOp
   return (await response.json()) as T
 }
 
+function toModelBody(model?: ModelSelection) {
+  if (!model) return undefined
+  return { providerID: model.providerID, modelID: model.modelID }
+}
+
+function toCreateSessionModel(model?: ModelSelection) {
+  if (!model) return undefined
+  return { providerID: model.providerID, id: model.modelID, variant: model.variant || undefined }
+}
+
+function modelWireName(model?: ModelSelection) {
+  if (!model) return undefined
+  return `${model.providerID}/${model.modelID}`
+}
+
 export const api = {
   health(config: ServerConfig) {
     return request<HealthResponse>(config, "/global/health")
@@ -123,8 +163,34 @@ export const api = {
     return request<CommandInfo[]>(config, "/command")
   },
 
-  createSession(config: ServerConfig, title?: string) {
-    return request<Session>(config, "/session", { method: "POST", body: { title } })
+  async listModels(config: ServerConfig, directory?: string) {
+    const response = await request<ConfigProvidersResponse>(config, withDirectory("/config/providers", directory))
+    return response.providers.flatMap((provider) => {
+      const defaultModel = response.default?.[provider.id]
+      return Object.entries(provider.models).flatMap(([modelID, model]) => {
+        const base: ModelOption = {
+          providerID: provider.id,
+          providerName: provider.name || provider.id,
+          modelID: model.id || modelID,
+          modelName: model.name || model.id || modelID,
+          status: model.status,
+          contextLimit: model.limit?.context,
+          outputLimit: model.limit?.output,
+          tools: Boolean(model.capabilities?.toolcall || model.capabilities?.tools),
+          attachments: Boolean(model.capabilities?.attachment),
+          isDefault: defaultModel === modelID
+        }
+        const variantIDs = Object.keys(model.variants ?? {})
+        return [
+          base,
+          ...variantIDs.map((variant) => ({ ...base, variant, isDefault: false }))
+        ]
+      })
+    })
+  },
+
+  createSession(config: ServerConfig, title?: string, model?: ModelSelection) {
+    return request<Session>(config, "/session", { method: "POST", body: { title, model: toCreateSessionModel(model) } })
   },
 
   renameSession(config: ServerConfig, id: string, title: string) {
@@ -159,17 +225,17 @@ export const api = {
     return request<FileStatusEntry[] | Record<string, FileStatusEntry>>(config, withDirectory("/file/status", directory))
   },
 
-  sendPrompt(config: ServerConfig, sessionID: string, text: string, directory?: string) {
+  sendPrompt(config: ServerConfig, sessionID: string, text: string, directory?: string, model?: ModelSelection) {
     return request<MessageEnvelope>(config, withDirectory(`/session/${sessionID}/message`, directory), {
       method: "POST",
-      body: { parts: [{ type: "text", text }] }
+      body: { parts: [{ type: "text", text }], model: toModelBody(model), variant: model?.variant || undefined }
     })
   },
 
-  sendCommand(config: ServerConfig, sessionID: string, command: string, argumentsText: string, directory?: string) {
+  sendCommand(config: ServerConfig, sessionID: string, command: string, argumentsText: string, directory?: string, model?: ModelSelection) {
     return request<MessageEnvelope>(config, withDirectory(`/session/${sessionID}/command`, directory), {
       method: "POST",
-      body: { command, arguments: argumentsText }
+      body: { command, arguments: argumentsText, model: modelWireName(model), variant: model?.variant || undefined }
     })
   },
 

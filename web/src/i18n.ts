@@ -83,6 +83,26 @@ type TranslationKey =
   | 'detail.filesCount'
   | 'detail.miniDiffAria'
   | 'detail.linesAddedDeleted'
+  | 'detail.modelPanelLabel'
+  | 'detail.modelTitle'
+  | 'detail.modelHint'
+  | 'detail.refreshModels'
+  | 'detail.modelSelectLabel'
+  | 'detail.modelDefault'
+  | 'detail.modelProvider'
+  | 'detail.modelContext'
+  | 'detail.modelToolsYes'
+  | 'detail.modelToolsNo'
+  | 'detail.modelVariant'
+  | 'detail.modelLoading'
+  | 'detail.modelLoadError'
+  | 'detail.contextStripLabel'
+  | 'detail.aiChip'
+  | 'detail.filesChip'
+  | 'detail.detailsChip'
+  | 'detail.sessionDetailsTitle'
+  | 'detail.sessionDetailsHint'
+  | 'detail.closeSheet'
   | 'todo.title'
   | 'todo.hide'
   | 'todo.show'
@@ -181,6 +201,26 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'detail.filesCount': '{count} files',
     'detail.miniDiffAria': 'Changed files mini diff',
     'detail.linesAddedDeleted': '+{additions} lines · -{deletions} lines',
+    'detail.modelPanelLabel': 'AI model picker',
+    'detail.modelTitle': 'AI model',
+    'detail.modelHint': 'Applies to the next prompt and to new sessions. Current running replies keep their original model.',
+    'detail.refreshModels': 'Refresh models',
+    'detail.modelSelectLabel': 'Model for next prompt',
+    'detail.modelDefault': 'default',
+    'detail.modelProvider': 'Provider: {provider}',
+    'detail.modelContext': 'Context {context} · output {output}',
+    'detail.modelToolsYes': 'Tools enabled',
+    'detail.modelToolsNo': 'No tools',
+    'detail.modelVariant': 'Variant: {variant}',
+    'detail.modelLoading': 'Loading configured models...',
+    'detail.modelLoadError': 'Cannot load models: {message}',
+    'detail.contextStripLabel': 'Session context shortcuts',
+    'detail.aiChip': 'AI',
+    'detail.filesChip': 'Files',
+    'detail.detailsChip': 'Details',
+    'detail.sessionDetailsTitle': 'Session details',
+    'detail.sessionDetailsHint': 'Advanced project, VCS, file and model information.',
+    'detail.closeSheet': 'Close',
     'todo.title': 'Todo Items',
     'todo.hide': 'Hide',
     'todo.show': 'Show',
@@ -278,6 +318,26 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'detail.filesCount': '{count} file',
     'detail.miniDiffAria': 'Mini diff dei file modificati',
     'detail.linesAddedDeleted': '+{additions} righe · -{deletions} righe',
+    'detail.modelPanelLabel': 'Selettore modello AI',
+    'detail.modelTitle': 'Modello AI',
+    'detail.modelHint': 'Si applica al prossimo prompt e alle nuove sessioni. Le risposte già in corso restano sul modello originale.',
+    'detail.refreshModels': 'Aggiorna modelli',
+    'detail.modelSelectLabel': 'Modello per il prossimo prompt',
+    'detail.modelDefault': 'default',
+    'detail.modelProvider': 'Provider: {provider}',
+    'detail.modelContext': 'Contesto {context} · output {output}',
+    'detail.modelToolsYes': 'Tool abilitati',
+    'detail.modelToolsNo': 'Nessun tool',
+    'detail.modelVariant': 'Variante: {variant}',
+    'detail.modelLoading': 'Caricamento modelli configurati...',
+    'detail.modelLoadError': 'Impossibile caricare i modelli: {message}',
+    'detail.contextStripLabel': 'Scorciatoie contesto sessione',
+    'detail.aiChip': 'AI',
+    'detail.filesChip': 'File',
+    'detail.detailsChip': 'Dettagli',
+    'detail.sessionDetailsTitle': 'Dettagli sessione',
+    'detail.sessionDetailsHint': 'Informazioni avanzate su progetto, VCS, file e modello.',
+    'detail.closeSheet': 'Chiudi',
     'todo.title': 'Todo',
     'todo.hide': 'Nascondi',
     'todo.show': 'Mostra',
@@ -375,6 +435,26 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'detail.filesCount': '{count} 個檔案',
     'detail.miniDiffAria': '已變更檔案迷你 diff',
     'detail.linesAddedDeleted': '+{additions} 行 · -{deletions} 行',
+    'detail.modelPanelLabel': 'AI 模型選擇器',
+    'detail.modelTitle': 'AI 模型',
+    'detail.modelHint': '套用到下一個提示與新工作階段。進行中的回覆仍使用原本模型。',
+    'detail.refreshModels': '重新整理模型',
+    'detail.modelSelectLabel': '下一個提示的模型',
+    'detail.modelDefault': '預設',
+    'detail.modelProvider': '提供者：{provider}',
+    'detail.modelContext': '上下文 {context} · 輸出 {output}',
+    'detail.modelToolsYes': '已啟用工具',
+    'detail.modelToolsNo': '無工具',
+    'detail.modelVariant': '變體：{variant}',
+    'detail.modelLoading': '正在載入已設定模型...',
+    'detail.modelLoadError': '無法載入模型：{message}',
+    'detail.contextStripLabel': '工作階段情境捷徑',
+    'detail.aiChip': 'AI',
+    'detail.filesChip': '檔案',
+    'detail.detailsChip': '詳細資訊',
+    'detail.sessionDetailsTitle': '工作階段詳細資訊',
+    'detail.sessionDetailsHint': '專案、VCS、檔案與模型的進階資訊。',
+    'detail.closeSheet': '關閉',
     'todo.title': '待辦事項',
     'todo.hide': '隱藏',
     'todo.show': '顯示',

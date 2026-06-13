@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "./api"
 import { createTranslator, languageOptions, normalizeLanguage, type LanguageCode } from "./i18n"
-import type { CommandInfo, DiffFile, FileStatusEntry, MessageEnvelope, ProjectDashboard, ServerConfig, SessionView, TodoItem } from "./types"
+import type { CommandInfo, DiffFile, FileStatusEntry, MessageEnvelope, ModelOption, ModelSelection, ProjectDashboard, ServerConfig, SessionView, TodoItem } from "./types"
 import {
   SettingsIcon,
   FolderIcon,
@@ -20,6 +20,7 @@ import {
 
 const STORAGE_KEY = "opencode.remote.server"
 const LANGUAGE_STORAGE_KEY = "opencode.remote.language"
+const MODEL_STORAGE_KEY = "opencode.remote.model"
 
 const defaultConfig: ServerConfig = {
   host: "",
@@ -109,6 +110,28 @@ function canTestConfig(config: ServerConfig): boolean {
   return Boolean(config.host.trim() && config.port > 0 && config.username.trim())
 }
 
+function modelKey(model: ModelSelection): string {
+  return [model.providerID, model.modelID, model.variant ?? ""].map(encodeURIComponent).join("|")
+}
+
+function modelFromKey(value: string | null): ModelSelection | null {
+  if (!value) return null
+  const [providerID, modelID, variant] = value.split("|").map((part) => decodeURIComponent(part))
+  if (!providerID || !modelID) return null
+  return { providerID, modelID, variant: variant || undefined }
+}
+
+function sameModel(a: ModelSelection | null | undefined, b: ModelSelection | null | undefined): boolean {
+  return Boolean(a && b && a.providerID === b.providerID && a.modelID === b.modelID && (a.variant ?? "") === (b.variant ?? ""))
+}
+
+function formatLimit(value?: number): string {
+  if (!value) return "-"
+  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}M`
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`
+  return String(value)
+}
+
 function App() {
   type NoticeType = "info" | "success" | "error"
 
@@ -129,6 +152,9 @@ function App() {
   const [draftConfig, setDraftConfig] = useState<ServerConfig>(config)
   const [connectedVersion, setConnectedVersion] = useState<string>("")
   const [commands, setCommands] = useState<CommandInfo[]>([])
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null)
+  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(() => localStorage.getItem(MODEL_STORAGE_KEY))
   const [helpPage, setHelpPage] = useState<"overview" | "server" | "network" | "troubleshooting" | "commands">(
     "overview"
   )
@@ -162,6 +188,7 @@ function App() {
   const [connectionMessage, setConnectionMessage] = useState<string>("")
   const [lastTestedConfigKey, setLastTestedConfigKey] = useState<string | null>(null)
   const [sessionToDelete, setSessionToDelete] = useState<SessionView | null>(null)
+  const [activeDetailSheet, setActiveDetailSheet] = useState<null | "ai" | "vcs" | "files" | "details">(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
@@ -189,6 +216,19 @@ function App() {
   const vcsBranch = projectDashboard?.vcs
     ? pickString(projectDashboard.vcs.branch) || pickString(projectDashboard.vcs.status) || summarizeJson(projectDashboard.vcs)
     : null
+  const selectedModel = useMemo(() => modelFromKey(selectedModelKey), [selectedModelKey])
+  const activeModelOption = useMemo(() => {
+    if (selectedModel) {
+      const explicit = modelOptions.find((option) => sameModel(option, selectedModel))
+      if (explicit) return explicit
+    }
+    if (selectedSession?.model) {
+      const current = modelOptions.find((option) => sameModel(option, selectedSession.model))
+      if (current) return current
+    }
+    return modelOptions.find((option) => option.isDefault) ?? modelOptions[0] ?? null
+  }, [modelOptions, selectedModel, selectedSession?.model])
+  const activeModel = activeModelOption ? { providerID: activeModelOption.providerID, modelID: activeModelOption.modelID, variant: activeModelOption.variant } : selectedModel ?? undefined
 
   const filteredSessions = useMemo(() => {
     const text = query.trim().toLowerCase()
@@ -237,6 +277,11 @@ function App() {
   const changedSessions = sessions.filter(
     (session) => session.files > 0 || session.additions > 0 || session.deletions > 0
   ).length
+  const totalDiffAdditions = diffFiles.reduce((sum, file) => sum + file.additions, 0)
+  const totalDiffDeletions = diffFiles.reduce((sum, file) => sum + file.deletions, 0)
+  const showModelChip = modelOptions.length > 1 || Boolean(activeModelOption)
+  const showVcsChip = Boolean(vcsBranch || loadingProjectDashboard || dashboardError)
+  const showFilesChip = diffFiles.length > 0
 
   async function openSession(sessionID: string, directory: string) {
     sessionsScrollYRef.current = window.scrollY
@@ -309,7 +354,8 @@ function App() {
           status: statuses[session.id]?.type ?? "idle",
           files: session.summary?.files ?? 0,
           additions: session.summary?.additions ?? 0,
-          deletions: session.summary?.deletions ?? 0
+          deletions: session.summary?.deletions ?? 0,
+          model: session.model ? { providerID: session.model.providerID, modelID: session.model.id, variant: session.model.variant } : undefined
         }))
         .sort((a, b) => b.updated - a.updated)
       setSessions(mapped)
@@ -360,6 +406,32 @@ function App() {
     } catch {
       setCommands([])
     }
+  }
+
+  async function loadModels() {
+    if (!config.host || config.port <= 0) return
+    try {
+      const list = await api.listModels(config, selectedSession?.directory)
+      setModelOptions(list)
+      setModelLoadError(null)
+      const saved = modelFromKey(selectedModelKey)
+      if (saved && list.some((option) => sameModel(option, saved))) return
+      const sessionModel = selectedSession?.model
+      const sessionOption = sessionModel ? list.find((option) => sameModel(option, sessionModel)) : null
+      const fallback = sessionOption ?? list.find((option) => option.isDefault) ?? list[0]
+      if (fallback) {
+        const nextKey = modelKey(fallback)
+        setSelectedModelKey(nextKey)
+        localStorage.setItem(MODEL_STORAGE_KEY, nextKey)
+      }
+    } catch (err) {
+      setModelLoadError((err as Error).message)
+    }
+  }
+
+  function changeModel(nextKey: string) {
+    setSelectedModelKey(nextKey)
+    localStorage.setItem(MODEL_STORAGE_KEY, nextKey)
   }
 
   async function loadSelected(sessionID: string, directory: string) {
@@ -430,7 +502,7 @@ function App() {
     setCreatingSession(true)
     setRuntimeError(null)
     try {
-      const created = await api.createSession(config, "Mobile session")
+      const created = await api.createSession(config, "Mobile session", activeModel)
       await refreshSessions()
       setSelectedID(created.id)
       setView("detail")
@@ -458,9 +530,9 @@ function App() {
         const command = normalized.split(" ")[0]?.trim()
         const args = normalized.slice(command.length).trim()
         if (!command) return
-        await api.sendCommand(config, selectedSession.id, command, args, selectedSession.directory)
+        await api.sendCommand(config, selectedSession.id, command, args, selectedSession.directory, activeModel)
       } else {
-        await api.sendPrompt(config, selectedSession.id, text, selectedSession.directory)
+        await api.sendPrompt(config, selectedSession.id, text, selectedSession.directory, activeModel)
       }
       await loadSelected(selectedSession.id, selectedSession.directory)
       await refreshSessions()
@@ -518,6 +590,7 @@ function App() {
     initialSessionLoadRef.current = true
     refreshSessions(true).catch(() => undefined)
     loadCommands().catch(() => undefined)
+    loadModels().catch(() => undefined)
     const timer = setInterval(() => {
       refreshSessions(true).catch(() => undefined)
       if (selectedSession) {
@@ -866,68 +939,30 @@ function App() {
             </div>
 
           {selectedSession && (
-            <section className="project-dashboard" aria-label={t('detail.projectDashboardLabel')}>
-              <div className="dashboard-card">
-                <span className="dashboard-label">{t('detail.projectLabel')}</span>
-                <strong>{projectName || selectedSession.directory}</strong>
-                <small>{projectPath || selectedSession.directory}</small>
-              </div>
-              <div className="dashboard-card">
-                <span className="dashboard-label">{t('detail.vcsLabel')}</span>
-                <strong>{loadingProjectDashboard ? t('detail.loadingProject') : vcsBranch || t('detail.unavailable')}</strong>
-                {projectDashboard?.vcs && (
-                  <small>
-                    {t('detail.aheadBehind', { ahead: projectDashboard.vcs.ahead ?? 0, behind: projectDashboard.vcs.behind ?? 0 })}
-                  </small>
-                )}
-              </div>
-              <div className="dashboard-card">
-                <span className="dashboard-label">{t('detail.fileStatusLabel')}</span>
-                <strong>{projectDashboard?.files.length ?? 0}</strong>
-                <small>{dashboardError ? t('detail.dashboardError', { message: dashboardError }) : t('detail.fileStatusSource')}</small>
-              </div>
-            </section>
-          )}
-
-          {diffFiles.length > 0 && (
-            <section className="diff-panel" aria-label={t('detail.miniDiffAria')}>
-              <div className="diff-panel-header">
-                <div>
-                  <h3>{t('detail.changedFilesTitle')}</h3>
-                  <p className="subtle">{t('detail.changedFilesHint')}</p>
-                </div>
-                <span className="change-summary">
-                  <strong>{t('detail.filesCount', { count: diffFiles.length })}</strong>
-                  <strong className="positive">+{diffFiles.reduce((sum, file) => sum + file.additions, 0)}</strong>
-                  <strong className="negative">-{diffFiles.reduce((sum, file) => sum + file.deletions, 0)}</strong>
-                </span>
-              </div>
-              <div className="diff-file-list">
-                {diffFiles.map((file) => (
-                  <button
-                    type="button"
-                    key={file.file}
-                    className={selectedDiff?.file === file.file ? "diff-file active" : "diff-file"}
-                    onClick={() => setSelectedDiffFile(file.file)}
-                  >
-                    <span>{file.file}</span>
-                    <span>
-                      <strong className="positive">+{file.additions}</strong>{" "}
-                      <strong className="negative">-{file.deletions}</strong>
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {selectedDiff && (
-                <div className="mini-diff-card">
-                  <strong>{selectedDiff.file}</strong>
-                  <div className="mini-diff-bars" aria-hidden="true">
-                    <span className="mini-diff-add" style={{ flexGrow: Math.max(selectedDiff.additions, 1) }} />
-                    <span className="mini-diff-del" style={{ flexGrow: Math.max(selectedDiff.deletions, 1) }} />
-                  </div>
-                  <p className="subtle">{t('detail.linesAddedDeleted', { additions: selectedDiff.additions, deletions: selectedDiff.deletions })}</p>
-                </div>
+            <section className="session-context-strip" aria-label={t('detail.contextStripLabel')}>
+              {showModelChip && (
+                <button type="button" className="context-chip" onClick={() => setActiveDetailSheet("ai")}>
+                  <span>{t('detail.aiChip')}</span>
+                  <strong>{activeModelOption?.modelName ?? t('detail.modelLoading')}</strong>
+                </button>
               )}
+              {showVcsChip && (
+                <button type="button" className="context-chip" onClick={() => setActiveDetailSheet("vcs")}>
+                  <span>{t('detail.vcsLabel')}</span>
+                  <strong>{loadingProjectDashboard ? t('detail.loadingProject') : vcsBranch || t('detail.unavailable')}</strong>
+                </button>
+              )}
+              {showFilesChip && (
+                <button type="button" className="context-chip" onClick={() => setActiveDetailSheet("files")}>
+                  <span>{t('detail.filesChip')}</span>
+                  <strong>{t('detail.filesCount', { count: diffFiles.length })}</strong>
+                  <small><span className="positive">+{totalDiffAdditions}</span> <span className="negative">-{totalDiffDeletions}</span></small>
+                </button>
+              )}
+              <button type="button" className="context-chip ghost" onClick={() => setActiveDetailSheet("details")}>
+                <span>{t('detail.detailsChip')}</span>
+                <strong>{projectName || t('detail.projectLabel')}</strong>
+              </button>
             </section>
           )}
 
@@ -1056,6 +1091,150 @@ function App() {
           
           {runtimeError && <div className="error fade-in">✗ {runtimeError}</div>}
         </main>
+      )}
+
+      {activeDetailSheet && selectedSession && (
+        <div className="sheet-backdrop" role="presentation" onClick={() => setActiveDetailSheet(null)}>
+          <section
+            className="bottom-sheet fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="detail-sheet-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" aria-hidden="true" />
+            <div className="sheet-header">
+              <div>
+                <h3 id="detail-sheet-title">
+                  {activeDetailSheet === "ai" && t('detail.modelTitle')}
+                  {activeDetailSheet === "vcs" && t('detail.vcsLabel')}
+                  {activeDetailSheet === "files" && t('detail.changedFilesTitle')}
+                  {activeDetailSheet === "details" && t('detail.sessionDetailsTitle')}
+                </h3>
+                <p className="subtle">
+                  {activeDetailSheet === "ai" && t('detail.modelHint')}
+                  {activeDetailSheet === "vcs" && (projectPath || selectedSession.directory)}
+                  {activeDetailSheet === "files" && t('detail.changedFilesHint')}
+                  {activeDetailSheet === "details" && t('detail.sessionDetailsHint')}
+                </p>
+              </div>
+              <button type="button" className="btn-secondary compact" onClick={() => setActiveDetailSheet(null)}>
+                {t('detail.closeSheet')}
+              </button>
+            </div>
+
+            {activeDetailSheet === "ai" && (
+              <div className="sheet-content">
+                <button type="button" className="btn-secondary" onClick={() => loadModels().catch(() => undefined)}>
+                  <RefreshIcon size={16} />
+                  {t('detail.refreshModels')}
+                </button>
+                {modelOptions.length > 0 ? (
+                  <div className="model-controls">
+                    <label htmlFor="model-select">
+                      {t('detail.modelSelectLabel')}
+                      <select
+                        id="model-select"
+                        value={activeModelOption ? modelKey(activeModelOption) : selectedModelKey ?? ""}
+                        onChange={(event) => changeModel(event.target.value)}
+                        disabled={isWorking}
+                      >
+                        {modelOptions.map((option) => (
+                          <option key={modelKey(option)} value={modelKey(option)}>
+                            {option.modelName} · {option.providerName}{option.variant ? ` · ${option.variant}` : ""}{option.isDefault ? ` · ${t('detail.modelDefault')}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {activeModelOption && (
+                      <div className="model-meta">
+                        <span>{t('detail.modelProvider', { provider: activeModelOption.providerName })}</span>
+                        <span>{t('detail.modelContext', { context: formatLimit(activeModelOption.contextLimit), output: formatLimit(activeModelOption.outputLimit) })}</span>
+                        <span>{activeModelOption.tools ? t('detail.modelToolsYes') : t('detail.modelToolsNo')}</span>
+                        {activeModelOption.variant && <span>{t('detail.modelVariant', { variant: activeModelOption.variant })}</span>}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="subtle">{modelLoadError ? t('detail.modelLoadError', { message: modelLoadError }) : t('detail.modelLoading')}</p>
+                )}
+              </div>
+            )}
+
+            {activeDetailSheet === "vcs" && (
+              <div className="sheet-content project-dashboard single-column">
+                <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.projectLabel')}</span>
+                  <strong>{projectName || selectedSession.directory}</strong>
+                  <small>{projectPath || selectedSession.directory}</small>
+                </div>
+                <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.vcsLabel')}</span>
+                  <strong>{loadingProjectDashboard ? t('detail.loadingProject') : vcsBranch || t('detail.unavailable')}</strong>
+                  {projectDashboard?.vcs && (
+                    <small>{t('detail.aheadBehind', { ahead: projectDashboard.vcs.ahead ?? 0, behind: projectDashboard.vcs.behind ?? 0 })}</small>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeDetailSheet === "files" && (
+              <div className="sheet-content">
+                <span className="change-summary">
+                  <strong>{t('detail.filesCount', { count: diffFiles.length })}</strong>
+                  <strong className="positive">+{totalDiffAdditions}</strong>
+                  <strong className="negative">-{totalDiffDeletions}</strong>
+                </span>
+                <div className="diff-file-list">
+                  {diffFiles.map((file) => (
+                    <button
+                      type="button"
+                      key={file.file}
+                      className={selectedDiff?.file === file.file ? "diff-file active" : "diff-file"}
+                      onClick={() => setSelectedDiffFile(file.file)}
+                    >
+                      <span>{file.file}</span>
+                      <span>
+                        <strong className="positive">+{file.additions}</strong>{" "}
+                        <strong className="negative">-{file.deletions}</strong>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {selectedDiff && (
+                  <div className="mini-diff-card">
+                    <strong>{selectedDiff.file}</strong>
+                    <div className="mini-diff-bars" aria-hidden="true">
+                      <span className="mini-diff-add" style={{ flexGrow: Math.max(selectedDiff.additions, 1) }} />
+                      <span className="mini-diff-del" style={{ flexGrow: Math.max(selectedDiff.deletions, 1) }} />
+                    </div>
+                    <p className="subtle">{t('detail.linesAddedDeleted', { additions: selectedDiff.additions, deletions: selectedDiff.deletions })}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeDetailSheet === "details" && (
+              <div className="sheet-content project-dashboard single-column">
+                <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.projectLabel')}</span>
+                  <strong>{projectName || selectedSession.directory}</strong>
+                  <small>{projectPath || selectedSession.directory}</small>
+                </div>
+                <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.fileStatusLabel')}</span>
+                  <strong>{projectDashboard?.files.length ?? 0}</strong>
+                  <small>{dashboardError ? t('detail.dashboardError', { message: dashboardError }) : t('detail.fileStatusSource')}</small>
+                </div>
+                <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.modelTitle')}</span>
+                  <strong>{activeModelOption?.modelName ?? t('detail.modelLoading')}</strong>
+                  <small>{activeModelOption?.providerName ?? "-"}</small>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {sessionToDelete && (
