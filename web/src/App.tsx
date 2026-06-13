@@ -42,6 +42,12 @@ function extractText(msg: MessageEnvelope): string {
     .trim()
 }
 
+function assistantPayloadLength(items: MessageEnvelope[]): number {
+  return items
+    .filter((message) => message.info.role !== "user")
+    .reduce((sum, message) => sum + extractText(message).length, 0)
+}
+
 function renderInline(text: string) {
   const codeChunks = text.split(/(`[^`]+`)/g)
   return codeChunks.map((chunk, index) => {
@@ -218,6 +224,7 @@ function App() {
   const wasRunningRef = useRef(false)
   const awaitingAssistantBaselineRef = useRef("")
   const sessionsScrollYRef = useRef(0)
+  const loadSelectedRequestRef = useRef(0)
   const backgroundFailureCountRef = useRef(0)
   const initialSessionLoadRef = useRef(true)
 
@@ -459,12 +466,17 @@ function App() {
   }
 
   async function loadSelected(sessionID: string, directory: string) {
+    const requestID = ++loadSelectedRequestRef.current
     const [msg, todo, diff] = await Promise.all([
       api.loadMessages(config, sessionID, directory),
       api.loadTodo(config, sessionID),
       api.loadDiff(config, sessionID).catch(() => [])
     ])
-    setMessages(msg)
+    if (requestID !== loadSelectedRequestRef.current) return
+    setMessages((current) => {
+      if (assistantPayloadLength(current) > assistantPayloadLength(msg)) return current
+      return msg
+    })
     setTodos(todo)
     setDiffFiles(diff)
     setSelectedDiffFile((current) => (current && diff.some((file) => file.file === current) ? current : diff[0]?.file ?? null))
