@@ -686,9 +686,13 @@ p {
 
 .model-option {
   width: 100%;
+  min-height: 64px;
   justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
   border-color: var(--border);
   background: var(--surface);
+  padding: 0.85rem 0.9rem;
   text-align: left;
 }
 
@@ -698,9 +702,11 @@ p {
 }
 
 .model-option span {
+  flex: 1 1 auto;
   min-width: 0;
   display: grid;
-  gap: 0.1rem;
+  gap: 0.2rem;
+  line-height: 1.25;
 }
 
 .model-option strong,
@@ -712,6 +718,7 @@ p {
 
 .model-option small {
   color: var(--muted);
+  line-height: 1.25;
 }
 
 .model-option em {

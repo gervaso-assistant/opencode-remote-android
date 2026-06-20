@@ -29,5 +29,7 @@ assert.ok(i18n.includes("'detail.modelSearchPlaceholder'"), 'model search string
 assert.ok(/\.context-chip[\s\S]*?overflow/.test(styles), 'context chips should have compact mobile styling')
 assert.ok(/\.bottom-sheet[\s\S]*?max-height/.test(styles), 'model/details should use a mobile bottom sheet')
 assert.ok(/\.model-option-list[\s\S]*?overflow-y/.test(styles), 'searchable model results should scroll in the sheet')
+assert.ok(/\.model-option[\s\S]*?min-height:\s*64px/.test(styles), 'model options should be tall enough for two-line labels')
+assert.ok(/\.model-option span[\s\S]*?line-height:\s*1\.25/.test(styles), 'model option text should not look vertically squeezed')
 
 console.log('model picker regression tests passed')
