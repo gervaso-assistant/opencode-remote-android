@@ -587,9 +587,8 @@ p {
 }
 
 .context-chip {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   min-width: 118px;
-  max-width: 190px;
   min-height: 58px;
   display: flex;
   flex-direction: column;

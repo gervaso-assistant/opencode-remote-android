@@ -233,9 +233,9 @@ function App() {
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<MessageEnvelope[]>([])
   const [todos, setTodos] = useState<TodoItem[]>([])
   const [diffFiles, setDiffFiles] = useState<DiffFile[]>([])
-  const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
+
   const [projectDashboard, setProjectDashboard] = useState<ProjectDashboard | null>(null)
-  const [loadingProjectDashboard, setLoadingProjectDashboard] = useState(false)
+
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [todosExpanded, setTodosExpanded] = useState(false)
   const [query, setQuery] = useState("")
@@ -254,7 +254,7 @@ function App() {
   const [connectionMessage, setConnectionMessage] = useState<string>("")
   const [lastTestedConfigKey, setLastTestedConfigKey] = useState<string | null>(null)
   const [sessionToDelete, setSessionToDelete] = useState<SessionView | null>(null)
-  const [activeDetailSheet, setActiveDetailSheet] = useState<null | "ai" | "vcs" | "files" | "details">(null)
+  const [activeDetailSheet, setActiveDetailSheet] = useState<null | "ai" | "details">(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
@@ -263,7 +263,6 @@ function App() {
   const wasAwaitingAssistantReplyRef = useRef(false)
   const wasRunningRef = useRef(false)
   const awaitingAssistantBaselineRef = useRef("")
-  const sessionsScrollYRef = useRef(0)
   const loadSelectedRequestRef = useRef(0)
   const backgroundFailureCountRef = useRef(0)
   const initialSessionLoadRef = useRef(true)
@@ -272,10 +271,6 @@ function App() {
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedID) ?? null,
     [sessions, selectedID]
-  )
-  const selectedDiff = useMemo(
-    () => diffFiles.find((file) => file.file === selectedDiffFile) ?? diffFiles[0] ?? null,
-    [diffFiles, selectedDiffFile]
   )
   const projectPath = projectDashboard?.project
     ? pickString(projectDashboard.project.path) || pickString(projectDashboard.project.directory) || pickString(projectDashboard.project.root)
@@ -361,17 +356,13 @@ function App() {
   const totalDiffAdditions = diffFiles.reduce((sum, file) => sum + file.additions, 0)
   const totalDiffDeletions = diffFiles.reduce((sum, file) => sum + file.deletions, 0)
   const showModelChip = modelOptions.length > 1 || Boolean(activeModelOption)
-  const showVcsChip = Boolean(vcsBranch || loadingProjectDashboard || dashboardError)
-  const showFilesChip = diffFiles.length > 0
 
   async function openSession(sessionID: string, directory: string) {
-    sessionsScrollYRef.current = window.scrollY
     setSelectedID(sessionID)
     setMessages([])
     setOptimisticUserMessages([])
     setTodos([])
     setDiffFiles([])
-    setSelectedDiffFile(null)
     setProjectDashboard(null)
     setDashboardError(null)
     setAwaitingAssistantReply(false)
@@ -380,6 +371,7 @@ function App() {
     setLoadingSessionID(sessionID)
     try {
       await loadSelected(sessionID, directory)
+      await loadModels()
     } catch (err) {
       setRuntimeError((err as Error).message)
     }
@@ -499,11 +491,17 @@ function App() {
       const list = await api.listModels(config, selectedSession?.directory ?? selectedNewSessionDirectory)
       setModelOptions(list)
       setModelLoadError(null)
-      const saved = modelFromKey(selectedModelKey)
-      if (saved && list.some((option) => sameModel(option, saved))) return
       const sessionModel = selectedSession?.model
       const sessionOption = sessionModel ? list.find((option) => sameModel(option, sessionModel)) : null
-      const fallback = sessionOption ?? list.find((option) => option.isDefault) ?? list[0]
+      if (sessionOption) {
+        const nextKey = modelKey(sessionOption)
+        setSelectedModelKey(nextKey)
+        localStorage.setItem(MODEL_STORAGE_KEY, nextKey)
+        return
+      }
+      const saved = modelFromKey(selectedModelKey)
+      if (saved && list.some((option) => sameModel(option, saved))) return
+      const fallback = list.find((option) => option.isDefault) ?? list[0]
       if (fallback) {
         const nextKey = modelKey(fallback)
         setSelectedModelKey(nextKey)
@@ -548,12 +546,10 @@ function App() {
     setOptimisticUserMessages((current) => current.filter((message) => !hasMatchingUserMessage(msg, message)))
     setTodos(todo)
     setDiffFiles(diff)
-    setSelectedDiffFile((current) => (current && diff.some((file) => file.file === current) ? current : diff[0]?.file ?? null))
     await loadProjectDashboard(directory)
   }
 
   async function loadProjectDashboard(directory: string) {
-    setLoadingProjectDashboard(true)
     setDashboardError(null)
     try {
       const [project, vcs, fileStatus] = await Promise.all([
@@ -564,8 +560,6 @@ function App() {
       setProjectDashboard({ project, vcs, files: toFileStatusList(fileStatus) })
     } catch (err) {
       setDashboardError((err as Error).message)
-    } finally {
-      setLoadingProjectDashboard(false)
     }
   }
 
@@ -792,7 +786,6 @@ function App() {
         setOptimisticUserMessages([])
         setTodos([])
         setDiffFiles([])
-        setSelectedDiffFile(null)
         setProjectDashboard(null)
         setDashboardError(null)
         setView("sessions")
@@ -1248,7 +1241,10 @@ function App() {
       {view === "detail" && (
         <main className="panel detail fade-in">
           <div className="detail-topbar">
-            <button className="btn-secondary" onClick={() => { setView("sessions"); requestAnimationFrame(() => window.scrollTo({ top: sessionsScrollYRef.current })) }}>{t('detail.backToSessions')}</button>
+            <button className="btn-secondary" onClick={() => {
+              setView("sessions");
+              requestAnimationFrame(() => document.querySelector<HTMLElement>(".session-card.active")?.scrollIntoView({ block: "center" }));
+            }}>{t('detail.backToSessions')}</button>
             {selectedSession && (
               <span className={`pill ${selectedSession.status}`}>{selectedSession.status}</span>
             )}
@@ -1281,19 +1277,7 @@ function App() {
                   <strong>{activeModelOption?.modelName ?? t('detail.modelLoading')}</strong>
                 </button>
               )}
-              {showVcsChip && (
-                <button type="button" className="context-chip" onClick={() => setActiveDetailSheet("vcs")}>
-                  <span>{t('detail.vcsLabel')}</span>
-                  <strong>{loadingProjectDashboard ? t('detail.loadingProject') : vcsBranch || t('detail.unavailable')}</strong>
-                </button>
-              )}
-              {showFilesChip && (
-                <button type="button" className="context-chip" onClick={() => setActiveDetailSheet("files")}>
-                  <span>{t('detail.filesChip')}</span>
-                  <strong>{t('detail.filesCount', { count: diffFiles.length })}</strong>
-                  <small><span className="positive">+{totalDiffAdditions}</span> <span className="negative">-{totalDiffDeletions}</span></small>
-                </button>
-              )}
+
               <button type="button" className="context-chip ghost" onClick={() => setActiveDetailSheet("details")}>
                 <span>{t('detail.detailsChip')}</span>
                 <strong>{projectName || t('detail.projectLabel')}</strong>
@@ -1439,14 +1423,10 @@ function App() {
               <div>
                 <h3 id="detail-sheet-title">
                   {activeDetailSheet === "ai" && t('detail.modelTitle')}
-                  {activeDetailSheet === "vcs" && t('detail.vcsLabel')}
-                  {activeDetailSheet === "files" && t('detail.changedFilesTitle')}
                   {activeDetailSheet === "details" && t('detail.sessionDetailsTitle')}
                 </h3>
                 <p className="subtle">
                   {activeDetailSheet === "ai" && t('detail.modelHint')}
-                  {activeDetailSheet === "vcs" && (projectPath || selectedSession.directory)}
-                  {activeDetailSheet === "files" && t('detail.changedFilesHint')}
                   {activeDetailSheet === "details" && t('detail.sessionDetailsHint')}
                 </p>
               </div>
@@ -1516,59 +1496,6 @@ function App() {
               </div>
             )}
 
-            {activeDetailSheet === "vcs" && (
-              <div className="sheet-content project-dashboard single-column">
-                <div className="dashboard-card">
-                  <span className="dashboard-label">{t('detail.projectLabel')}</span>
-                  <strong>{projectName || selectedSession.directory}</strong>
-                  <small>{projectPath || selectedSession.directory}</small>
-                </div>
-                <div className="dashboard-card">
-                  <span className="dashboard-label">{t('detail.vcsLabel')}</span>
-                  <strong>{loadingProjectDashboard ? t('detail.loadingProject') : vcsBranch || t('detail.unavailable')}</strong>
-                  {projectDashboard?.vcs && (
-                    <small>{t('detail.aheadBehind', { ahead: projectDashboard.vcs.ahead ?? 0, behind: projectDashboard.vcs.behind ?? 0 })}</small>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeDetailSheet === "files" && (
-              <div className="sheet-content">
-                <span className="change-summary">
-                  <strong>{t('detail.filesCount', { count: diffFiles.length })}</strong>
-                  <strong className="positive">+{totalDiffAdditions}</strong>
-                  <strong className="negative">-{totalDiffDeletions}</strong>
-                </span>
-                <div className="diff-file-list">
-                  {diffFiles.map((file) => (
-                    <button
-                      type="button"
-                      key={file.file}
-                      className={selectedDiff?.file === file.file ? "diff-file active" : "diff-file"}
-                      onClick={() => setSelectedDiffFile(file.file)}
-                    >
-                      <span>{file.file}</span>
-                      <span>
-                        <strong className="positive">+{file.additions}</strong>{" "}
-                        <strong className="negative">-{file.deletions}</strong>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                {selectedDiff && (
-                  <div className="mini-diff-card">
-                    <strong>{selectedDiff.file}</strong>
-                    <div className="mini-diff-bars" aria-hidden="true">
-                      <span className="mini-diff-add" style={{ flexGrow: Math.max(selectedDiff.additions, 1) }} />
-                      <span className="mini-diff-del" style={{ flexGrow: Math.max(selectedDiff.deletions, 1) }} />
-                    </div>
-                    <p className="subtle">{t('detail.linesAddedDeleted', { additions: selectedDiff.additions, deletions: selectedDiff.deletions })}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {activeDetailSheet === "details" && (
               <div className="sheet-content project-dashboard single-column">
                 <div className="dashboard-card">
@@ -1577,9 +1504,20 @@ function App() {
                   <small>{projectPath || selectedSession.directory}</small>
                 </div>
                 <div className="dashboard-card">
+                  <span className="dashboard-label">{t('detail.vcsLabel')}</span>
+                  <strong>{vcsBranch || t('detail.unavailable')}</strong>
+                  {projectDashboard?.vcs && (
+                    <small>{t('detail.aheadBehind', { ahead: projectDashboard.vcs.ahead ?? 0, behind: projectDashboard.vcs.behind ?? 0 })}</small>
+                  )}
+                </div>
+                <div className="dashboard-card">
                   <span className="dashboard-label">{t('detail.fileStatusLabel')}</span>
-                  <strong>{projectDashboard?.files.length ?? 0}</strong>
-                  <small>{dashboardError ? t('detail.dashboardError', { message: dashboardError }) : t('detail.fileStatusSource')}</small>
+                  <strong>{diffFiles.length > 0 ? t('detail.filesCount', { count: diffFiles.length }) : (projectDashboard?.files.length ?? 0)}</strong>
+                  {diffFiles.length > 0 ? (
+                    <small><span className="positive">+{totalDiffAdditions}</span> <span className="negative">-{totalDiffDeletions}</span></small>
+                  ) : (
+                    <small>{dashboardError ? t('detail.dashboardError', { message: dashboardError }) : t('detail.fileStatusSource')}</small>
+                  )}
                 </div>
                 <div className="dashboard-card">
                   <span className="dashboard-label">{t('detail.modelTitle')}</span>
@@ -1851,7 +1789,12 @@ http://YOUR_PC_IP:4096/global/health</pre>
           <button
             key={item.view}
             className={view === item.view ? "active" : ""}
-            onClick={() => setView(item.view)}
+            onClick={() => {
+              setView(item.view);
+              if (item.view === "sessions") {
+                requestAnimationFrame(() => document.querySelector<HTMLElement>(".session-card.active")?.scrollIntoView({ block: "center" }));
+              }
+            }}
             disabled={item.disabled}
             aria-label={item.label}
           >
