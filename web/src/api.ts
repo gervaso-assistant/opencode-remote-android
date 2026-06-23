@@ -23,7 +23,11 @@ function authHeader(config: ServerConfig): string {
 }
 
 function baseUrl(config: ServerConfig): string {
-  return `http://${config.host}:${config.port}`
+  const host = config.host.trim()
+  const schemeMatch = host.match(/^(https?):\/\//)
+  const scheme = schemeMatch ? schemeMatch[1] : "http"
+  const cleanHost = schemeMatch ? host.slice(schemeMatch[0].length) : host
+  return `${scheme}://${cleanHost}:${config.port}`
 }
 
 function withDirectory(path: string, directory?: string): string {

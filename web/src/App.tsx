@@ -423,7 +423,7 @@ function App() {
     }
   }
 
-  async function refreshSessions(silent = false) {
+  async function refreshSessions(silent = false, preserveSession?: SessionView) {
     if (!config.host || config.port <= 0) return
     if (!silent) {
       setRuntimeError(null)
@@ -449,8 +449,9 @@ function App() {
         .sort((a, b) => b.updated - a.updated)
       setSessions((current) => {
         const selected = selectedID ? current.find((session) => session.id === selectedID) : null
-        if (!selected || mapped.some((session) => session.id === selected.id)) return mapped
-        return [selected, ...mapped].sort((a, b) => b.updated - a.updated)
+        const toPreserve = preserveSession ?? selected
+        if (!toPreserve || mapped.some((session) => session.id === toPreserve.id)) return mapped
+        return [toPreserve, ...mapped].sort((a, b) => b.updated - a.updated)
       })
       backgroundFailureCountRef.current = 0
       initialSessionLoadRef.current = false
@@ -697,7 +698,7 @@ function App() {
       setSelectedID(created.id)
       setView("detail")
       await loadSelected(created.id, created.directory)
-      await refreshSessions()
+      await refreshSessions(false, createdView)
     } catch (err) {
       setPickerError((err as Error).message)
       setRuntimeError((err as Error).message)
