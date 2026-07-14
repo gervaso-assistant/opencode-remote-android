@@ -1209,12 +1209,17 @@ function App() {
                   <div className="session-card-main">
                     <div>
                       {renamingSessionID === session.id ? (
-                        <div className="rename-inline">
+                        <div
+                          className="rename-inline"
+                          onClick={(event) => event.stopPropagation()}
+                          onMouseDown={(event) => event.stopPropagation()}
+                        >
                           <input
                             ref={renameInputRef}
                             value={renameValue}
                             onChange={(event) => setRenameValue(event.target.value)}
                             onKeyDown={(event) => {
+                              event.stopPropagation()
                               if (event.key === "Enter") {
                                 event.preventDefault()
                                 renameSession(session.id, renameValue, session.directory).catch(() => undefined)
@@ -1234,11 +1239,24 @@ function App() {
                           />
                           <button
                             className="btn-primary compact"
-                            onClick={() => renameSession(session.id, renameValue, session.directory).catch(() => undefined)}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              renameSession(session.id, renameValue, session.directory).catch(() => undefined)
+                            }}
                             onMouseDown={(event) => event.preventDefault()}
                             title={t('session.renameConfirm')}
                           >
                             <SaveIcon size={14} />
+                          </button>
+                          <button
+                            className="btn-secondary compact"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              cancelRename()
+                            }}
+                            title={t('session.cancel')}
+                          >
+                            <CloseIcon size={14} />
                           </button>
                         </div>
                       ) : (
