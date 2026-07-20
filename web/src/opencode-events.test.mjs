@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import {
+  createFetchOpenCodeEventSubscription,
   createOpenCodeEventSubscription,
+  eventType,
   parseOpenCodeEvent,
+  parseSSEFrame,
   streamURL
 } from './opencode-events.ts'
 
@@ -14,6 +17,10 @@ const globalSessionCreated = JSON.stringify({
   directory: '/home/giulio/Software/opencode-remote-android',
   payload: JSON.parse(sessionCreated)
 })
+const globalHeartbeat = JSON.stringify({
+  directory: '/home/giulio/Software/opencode-remote-android',
+  payload: JSON.parse(serverHeartbeat)
+})
 
 assert.deepEqual(parseOpenCodeEvent(sessionCreated), {
   ok: true, name: 'message', raw: sessionCreated, data: JSON.parse(sessionCreated)
@@ -21,9 +28,26 @@ assert.deepEqual(parseOpenCodeEvent(sessionCreated), {
 assert.deepEqual(parseOpenCodeEvent(globalSessionCreated), {
   ok: true, name: 'message', raw: globalSessionCreated, data: JSON.parse(globalSessionCreated)
 })
+assert.equal(eventType(JSON.parse(globalSessionCreated)), 'session.created')
+assert.equal(eventType(JSON.parse(globalHeartbeat)), 'server.heartbeat')
+assert.equal(eventType({ type: 'message.updated' }), 'message.updated')
+assert.equal(eventType(['unexpected']), null)
 assert.deepEqual(parseOpenCodeEvent(JSON.stringify(['future', 'event']), 'future.event'), {
   ok: true, name: 'future.event', raw: JSON.stringify(['future', 'event']), data: ['future', 'event']
 })
+assert.deepEqual(parseSSEFrame('event: session.updated\ndata: {"id":"ses_1"}\n\n'), {
+  ok: true,
+  name: 'session.updated',
+  raw: '{"id":"ses_1"}',
+  data: { id: 'ses_1' }
+})
+assert.deepEqual(parseSSEFrame('data: {"id":"ses_2"}\n\n'), {
+  ok: true,
+  name: 'message',
+  raw: '{"id":"ses_2"}',
+  data: { id: 'ses_2' }
+})
+assert.equal(parseSSEFrame(': keep-alive\n\n'), null)
 const malformed = parseOpenCodeEvent('not json')
 assert.equal(malformed.ok, false)
 assert.equal(malformed.raw, 'not json')
@@ -123,5 +147,50 @@ const invalidSubscription = createOpenCodeEventSubscription({
 })
 assert.deepEqual(invalidDelays, [1_000], 'invalid retry delays should fall back safely')
 invalidSubscription.close()
+
+const fetchEvents = []
+const fetchStatuses = []
+const fetchCalls = []
+const encoder = new TextEncoder()
+const fetchSubscription = createFetchOpenCodeEventSubscription({
+  url: 'http://127.0.0.1:4097/global/event',
+  headers: { Authorization: 'Basic test-token' },
+  fetchFn: async (url, init) => {
+    fetchCalls.push({ url, init })
+    const body = new ReadableStream({
+      start(controller) {
+        const frame = `data: ${globalSessionCreated}\n\n`
+        controller.enqueue(encoder.encode(frame.slice(0, 12)))
+        controller.enqueue(encoder.encode(frame.slice(12)))
+        controller.close()
+      }
+    })
+    return new Response(body, { headers: { 'content-type': 'text/event-stream; charset=utf-8' } })
+  },
+  onEvent(event) { fetchEvents.push(event) },
+  onStatus(status) { fetchStatuses.push(status) },
+  logger() {}
+})
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(fetchCalls[0].url, 'http://127.0.0.1:4097/global/event')
+assert.equal(fetchCalls[0].init.headers.Authorization, 'Basic test-token')
+assert.equal(fetchCalls[0].init.headers.Accept, 'text/event-stream')
+assert.deepEqual(fetchEvents[0].data, JSON.parse(globalSessionCreated))
+assert.ok(fetchStatuses.some((status) => status.type === 'connected'))
+assert.ok(fetchStatuses.some((status) => status.type === 'reconnecting'))
+fetchSubscription.close()
+
+const invalidContentStatuses = []
+const invalidContentSubscription = createFetchOpenCodeEventSubscription({
+  url: 'http://127.0.0.1:4097/global/event',
+  fetchFn: async () => new Response('{}', { headers: { 'content-type': 'application/json' } }),
+  onEvent() {},
+  onStatus(status) { invalidContentStatuses.push(status) },
+  logger() {}
+})
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.ok(invalidContentStatuses.some((status) => status.type === 'connection-error'))
+assert.ok(!invalidContentStatuses.some((status) => status.type === 'connected'))
+invalidContentSubscription.close()
 
 console.log('OpenCode event subscription tests passed')

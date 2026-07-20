@@ -1,3 +1,5 @@
+import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core"
+
 export type ParsedOpenCodeEvent =
   | { ok: true; name: string; raw: string; data: unknown }
   | { ok: false; name: string; raw: string; error: string }
@@ -61,10 +63,187 @@ export function parseOpenCodeEvent(data: string, name = "message"): ParsedOpenCo
   }
 }
 
+/** Parses one SSE frame received through an authenticated fetch stream. */
+export function parseSSEFrame(frame: string): ParsedOpenCodeEvent | null {
+  let name = "message"
+  const data: string[] = []
+  for (const line of frame.replace(/\r/g, "").split("\n")) {
+    if (!line || line.startsWith(":")) continue
+    const separator = line.indexOf(":")
+    const field = separator === -1 ? line : line.slice(0, separator)
+    const value = separator === -1 ? "" : line.slice(separator + 1).replace(/^ /, "")
+    if (field === "event") name = value || name
+    if (field === "data") data.push(value)
+  }
+  if (data.length === 0) return null
+  return parseOpenCodeEvent(data.join("\n"), name)
+}
+
+/** OpenCode global SSE wraps the event payload in { directory, payload }. */
+export function eventPayload(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null
+  const envelope = data as Record<string, unknown>
+  const payload = envelope.payload
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) return payload as Record<string, unknown>
+  return envelope
+}
+
+export function eventType(data: unknown): string | null {
+  const payload = eventPayload(data)
+  return typeof payload?.type === "string" ? payload.type : null
+}
+
+type FetchEventSubscriptionOptions = {
+  url: string
+  headers?: Record<string, string>
+  reconnect?: ReconnectConfig
+  fetchFn?: typeof fetch
+  onEvent: (event: Extract<ParsedOpenCodeEvent, { ok: true }>) => void
+  onStatus?: (status: EventStreamStatus) => void
+  logger?: (message: string) => void
+}
+
 /**
- * Isolated SSE prototype. It is intentionally not wired into App.tsx yet.
- * Browser EventSource cannot attach Basic-Auth headers, so authenticated server
- * support needs a validated native transport or server auth change before use.
+ * Authenticated SSE transport. Unlike EventSource it can send Basic-Auth headers.
+ * It deliberately keeps the UI on its existing polling fallback if the stream is unavailable.
+ */
+export function createFetchOpenCodeEventSubscription(options: FetchEventSubscriptionOptions): { close(): void } {
+  const initialDelayMs = validDelay(options.reconnect?.initialDelayMs, 1_000)
+  const maxDelayMs = Math.max(initialDelayMs, validDelay(options.reconnect?.maxDelayMs, 30_000))
+  const fetchFn = options.fetchFn ?? fetch
+  const logger = options.logger ?? ((message: string) => console.debug(message))
+  let controller: AbortController | undefined
+  let reconnectTimer: TimerID | undefined
+  let reconnectDelayMs = initialDelayMs
+  let closed = false
+
+  const publishStatus = (status: EventStreamStatus) => options.onStatus?.(status)
+  const scheduleReconnect = () => {
+    if (closed || reconnectTimer !== undefined) return
+    const delayMs = reconnectDelayMs
+    reconnectDelayMs = Math.min(maxDelayMs, reconnectDelayMs * 2)
+    publishStatus({ type: "reconnecting", delayMs })
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined
+      connect()
+    }, delayMs)
+  }
+
+  const connect = async () => {
+    if (closed) return
+    const currentController = new AbortController()
+    controller = currentController
+    try {
+      const response = await fetchFn(options.url, {
+        headers: { Accept: "text/event-stream", ...options.headers },
+        signal: currentController.signal
+      })
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+      const contentType = response.headers.get("content-type") ?? ""
+      if (!contentType.toLowerCase().includes("text/event-stream")) {
+        throw new Error(`Expected text/event-stream, received ${contentType || "no content type"}`)
+      }
+      reconnectDelayMs = initialDelayMs
+      publishStatus({ type: "connected" })
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      while (!closed && controller === currentController) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let boundary = buffer.search(/\r?\n\r?\n/)
+        while (boundary !== -1) {
+          const frame = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, "")
+          const event = parseSSEFrame(frame)
+          if (event?.ok) options.onEvent(event)
+          if (event && !event.ok) publishStatus({ type: "parse-error", data: event.raw })
+          boundary = buffer.search(/\r?\n\r?\n/)
+        }
+      }
+    } catch (error) {
+      if (!closed && controller === currentController && !(error instanceof DOMException && error.name === "AbortError")) {
+        const message = errorMessage(error)
+        publishStatus({ type: "connection-error", error: message })
+        logger(`OpenCode SSE connection failed: ${message}`)
+      }
+    }
+    if (!closed && controller === currentController) scheduleReconnect()
+  }
+
+  connect().catch(() => undefined)
+  return {
+    close() {
+      if (closed) return
+      closed = true
+      if (reconnectTimer !== undefined) clearTimeout(reconnectTimer)
+      reconnectTimer = undefined
+      controller?.abort()
+      controller = undefined
+      publishStatus({ type: "closed" })
+    }
+  }
+}
+
+type NativeLiveEventsPlugin = {
+  start(options: { url: string; username: string; password: string }): Promise<void>
+  stop(): Promise<void>
+  addListener(eventName: "event", listenerFunc: (event: { data?: string }) => void): Promise<PluginListenerHandle>
+  addListener(eventName: "status", listenerFunc: (status: EventStreamStatus) => void): Promise<PluginListenerHandle>
+}
+
+const NativeLiveEvents = registerPlugin<NativeLiveEventsPlugin>("LiveEvents")
+
+export function isNativeEventTransport(): boolean {
+  return Capacitor.getPlatform() === "android"
+}
+
+/** Android WebView cannot reliably keep a fetch ReadableStream open; use a direct native HttpURLConnection SSE client. */
+export function createNativeOpenCodeEventSubscription(options: {
+  url: string
+  username: string
+  password: string
+  onEvent: (event: Extract<ParsedOpenCodeEvent, { ok: true }>) => void
+  onStatus?: (status: EventStreamStatus) => void
+}): { close(): void } {
+  let closed = false
+  let handles: PluginListenerHandle[] = []
+  void (async () => {
+    try {
+      const eventHandle = await NativeLiveEvents.addListener("event", ({ data }) => {
+        if (closed || !data) return
+        const event = parseOpenCodeEvent(data)
+        if (event.ok) options.onEvent(event)
+        else options.onStatus?.({ type: "parse-error", data })
+      })
+      const statusHandle = await NativeLiveEvents.addListener("status", (status) => {
+        if (!closed) options.onStatus?.(status)
+      })
+      handles = [eventHandle, statusHandle]
+      if (closed) {
+        await Promise.all(handles.map((handle) => handle.remove()))
+        return
+      }
+      await NativeLiveEvents.start({ url: options.url, username: options.username, password: options.password })
+    } catch (error) {
+      if (!closed) options.onStatus?.({ type: "connection-error", error: errorMessage(error) })
+    }
+  })()
+  return {
+    close() {
+      if (closed) return
+      closed = true
+      void NativeLiveEvents.stop().catch(() => undefined)
+      void Promise.all(handles.map((handle) => handle.remove())).catch(() => undefined)
+      options.onStatus?.({ type: "closed" })
+    }
+  }
+}
+
+/**
+ * Isolated EventSource prototype for unauthenticated servers and unit tests.
+ * Authenticated app integration uses createFetchOpenCodeEventSubscription above.
  */
 export function createOpenCodeEventSubscription(options: EventSubscriptionOptions): { close(): void } {
   const initialDelayMs = validDelay(options.reconnect?.initialDelayMs, 1_000)
