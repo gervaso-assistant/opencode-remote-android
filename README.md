@@ -78,6 +78,20 @@ npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096 --cors http://localhost 
 
 If remote/mobile cannot connect, open TCP 4096 in your OS firewall and network firewall/NAT.
 
+## Oh My Pi Bridge Setup
+
+The app can also connect to a local OMP bridge. The bridge starts `omp acp` on the same computer and exposes the OpenCode-compatible HTTP/SSE endpoints used by the app; it never reads OMP's internal databases directly.
+
+From this repository:
+
+```bash
+npx --yes ./bridge --host 0.0.0.0 --port 4097 --username omp --password your-password --root "$PWD"
+```
+
+In Settings, select **Oh My Pi (bridge)**, then enter the computer's LAN IP, port `4097`, and the same credentials. The bridge binds to `127.0.0.1` by default; use `0.0.0.0` only for LAN access. Do not expose it directly to the Internet—use a VPN or reverse proxy with TLS.
+
+OMP sessions expose their configured model in the app and let you change it for subsequent prompts. Agent selection, persistent session rename/delete, server slash commands, VCS/diff, and directories outside `--root` are intentionally unavailable in the current bridge.
+
 ## Run Locally (Web)
 
 ```bash

@@ -12,6 +12,7 @@ type TranslationKey =
   | 'menu.detailDescription'
   | 'menu.helpDescription'
   | 'settings.title'
+  | 'settings.backend'
   | 'settings.host'
   | 'settings.hostPlaceholder'
   | 'settings.port'
@@ -162,6 +163,7 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'menu.detailDescription': 'Chat with OpenCode',
     'menu.helpDescription': 'Documentation & support',
     'settings.title': 'Server Configuration',
+    'settings.backend': 'Backend',
     'settings.host': 'Host Address',
     'settings.hostPlaceholder': '192.168.1.100, localhost, or https://example.com',
     'settings.port': 'Port',
@@ -311,6 +313,7 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'menu.detailDescription': 'Chatta con OpenCode',
     'menu.helpDescription': 'Documentazione e supporto',
     'settings.title': 'Configurazione server',
+    'settings.backend': 'Backend',
     'settings.host': 'Indirizzo host',
     'settings.hostPlaceholder': '192.168.1.100, localhost o https://example.com',
     'settings.port': 'Porta',
@@ -460,6 +463,7 @@ const translations: Record<LanguageCode, Record<TranslationKey, string>> = {
     'menu.detailDescription': '與 OpenCode 對話',
     'menu.helpDescription': '文件與支援',
     'settings.title': '伺服器設定',
+    'settings.backend': '後端',
     'settings.host': '主機位址',
     'settings.hostPlaceholder': '192.168.1.100、localhost 或 https://example.com',
     'settings.port': '連接埠',
