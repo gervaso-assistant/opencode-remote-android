@@ -36,7 +36,9 @@ Download the latest signed Android APK from the GitHub Releases page:
 
 https://github.com/giuliastro/opencode-remote-android/releases/latest
 
-## OpenCode Server Setup
+## Backend Setup
+
+### OpenCode Server Setup
 
 Start the OpenCode server with network access and Basic Auth.
 
@@ -78,7 +80,7 @@ npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096 --cors http://localhost 
 
 If remote/mobile cannot connect, open TCP 4096 in your OS firewall and network firewall/NAT.
 
-## Oh My Pi Bridge Setup
+### Oh My Pi Bridge Setup
 
 The app can also connect to a local OMP bridge. The bridge starts `omp acp` on the same computer and exposes the OpenCode-compatible HTTP/SSE endpoints used by the app; it never reads OMP's internal databases directly.
 
@@ -103,9 +105,9 @@ Open the shown URL from your browser (or your phone on the same LAN).
 
 ## Android APK Build (Cloud, no local SDK required)
 
-1. Push to `main` or run the workflow manually.
+1. Push to `main`; the workflow builds a signed debug APK for testing and a release APK.
 2. Open GitHub Actions -> **Build Android APK**.
-3. Download artifact `opencode-remote-release-apk-v<version>`.
+3. Download artifact `harness-remote-debug-apk-v<version>` for installation tests.
 4. Extract the artifact and install the APK on Android.
 
 To generate a signed release APK (`app-release-signed.apk`), configure these GitHub repository secrets:

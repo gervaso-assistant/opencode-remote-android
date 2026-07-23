@@ -179,6 +179,12 @@ Ancora intenzionalmente non supportato: rinomina/eliminazione persistente di una
 6. Testare end-to-end dall'APK.
 7. Aggiungere una capacità alla volta: abort, todo, modelli, VCS e directory.
 
+## Stato e prossime capacità
+
+La prima integrazione OMP è completata: connessione, sessioni, cronologia, prompt/streaming, annullamento, todo e modelli sono verificati. Il prossimo incremento deve essere scelto e verificato uno alla volta: agenti configurabili, rinomina/eliminazione persistente, VCS/diff oppure directory browser più ricco.
+
+Le impostazioni dell'app si autosalvano dopo una breve pausa di digitazione; non esiste più una modifica silenziosamente persa al cambio di pagina. L'help in-app mantiene un solo esempio minimo per il backend selezionato e rimanda alle guide versionate nel repository. Le future integrazioni aggiungono una guida nel repository, non pagine di help sempre più grandi nell'APK.
+
 ## Verifica
 
 Test unitari per parser ACP, mapping, auth, limitazione `--root` e restart. Test di integrazione contro un vero `omp acp`, non solo mock. Smoke test:

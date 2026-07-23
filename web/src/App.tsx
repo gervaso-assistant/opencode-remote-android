@@ -392,8 +392,6 @@ function App() {
 
   const hasConfiguredServer = Boolean(config.host && config.port > 0)
   const draftConfigKey = configKey(draftConfig)
-  const savedConfigKey = configKey(config)
-  const hasDraftChanges = draftConfigKey !== savedConfigKey
   const canTestDraft = canTestConfig(draftConfig)
   const testAlreadyPassedForDraft = lastTestedConfigKey === draftConfigKey
   const connectionStatusText = connectionMessage || (connectionState === "connecting"
@@ -448,8 +446,8 @@ function App() {
     setLoadingSessionID((activeID) => (activeID === sessionID ? null : activeID))
   }
 
-  function saveConfig() {
-    const serverChanged = configKey(draftConfig) !== configKey(config)
+  function applyConfig(nextConfig: ServerConfig) {
+    const serverChanged = configKey(nextConfig) !== configKey(config)
     if (serverChanged) {
       loadSelectedRequestRef.current += 1
       setSessions([])
@@ -466,9 +464,9 @@ function App() {
       setAgentOptions([])
       setModelOptions([])
     }
-    setConfig(draftConfig)
-    localStorage.setItem(BACKEND_STORAGE_KEYS[draftConfig.backend], JSON.stringify(draftConfig))
-    localStorage.setItem(ACTIVE_BACKEND_STORAGE_KEY, draftConfig.backend)
+    setConfig(nextConfig)
+    localStorage.setItem(BACKEND_STORAGE_KEYS[nextConfig.backend], JSON.stringify(nextConfig))
+    localStorage.setItem(ACTIVE_BACKEND_STORAGE_KEY, nextConfig.backend)
     setSettingsNotice({ type: "success", text: t('settings.saved') })
     setConnectionState("connecting")
     setConnectionMessage(t('connection.connecting'))
@@ -978,6 +976,12 @@ function App() {
     selectedSessionRef.current = selectedSession
   }, [selectedSession])
 
+  useEffect(() => {
+    if (configKey(draftConfig) === configKey(config)) return
+    const timer = setTimeout(() => applyConfig(draftConfig), 500)
+    return () => clearTimeout(timer)
+  }, [draftConfig, config])
+
 
   useEffect(() => {
     if (!selectedSession) {
@@ -1238,14 +1242,6 @@ function App() {
           
           <div className="actions">
             <button 
-              onClick={saveConfig} 
-              disabled={testingConnection || !hasDraftChanges}
-              className="btn-primary"
-            >
-              <SaveIcon size={18} />
-              {hasDraftChanges ? t('settings.save') : t('settings.savedButton')}
-            </button>
-            <button 
               onClick={() => testConnection(draftConfig)} 
               className="btn-secondary"
               disabled={testingConnection || !canTestDraft || testAlreadyPassedForDraft}
@@ -1276,7 +1272,6 @@ function App() {
           
           <div className="connection-help">
             <span>{canTestDraft ? t('settings.readyToTest') : t('settings.testNeedsFields')}</span>
-            <span>{hasDraftChanges ? t('settings.unsavedChanges') : t('settings.noUnsavedChanges')}</span>
           </div>
 
           {connectedVersion && testAlreadyPassedForDraft && (
@@ -1988,7 +1983,7 @@ function App() {
               <ul>
                 <li><strong>Configure Server:</strong> Use Settings to enter host, port, username and password</li>
                 <li><strong>Test Connection:</strong> Press Test to validate server connectivity</li>
-                <li><strong>Save Settings:</strong> Press Save to apply configuration and start polling</li>
+                <li><strong>Configuration:</strong> Changes are saved automatically and applied after you pause typing.</li>
                 <li><strong>Browse Sessions:</strong> View and manage sessions from the Sessions tab</li>
                 <li><strong>Interact:</strong> Open a session and chat in the Detail view</li>
                 <li><strong>Quick Input:</strong> Press Enter to send, Shift+Enter for new lines</li>
@@ -2008,31 +2003,33 @@ function App() {
 
           {helpPage === "server" && (
             <div className="help-content fade-in">
-              <h3>Starting the OpenCode Server</h3>
-              <p>Start OpenCode server with Basic Authentication enabled:</p>
-              
+              <h3>{config.backend === "omp" ? "Oh My Pi bridge" : "OpenCode server"}</h3>
+              <p>
+                This page keeps setup brief. Full, versioned backend guides live in the Harness Remote repository so new
+                backends do not make the app help unwieldy.
+              </p>
               <div className="code-blocks">
-                <h4>macOS / Linux (bash/zsh)</h4>
-                <pre>OPENCODE_SERVER_USERNAME=opencode \
-OPENCODE_SERVER_PASSWORD=your-password \
-npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096</pre>
-                
-                <h4>Windows PowerShell</h4>
-                <pre>$env:OPENCODE_SERVER_USERNAME="opencode"
-$env:OPENCODE_SERVER_PASSWORD="your-password"
-npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096</pre>
-                
-                <h4>Windows Command Prompt</h4>
-                <pre>set OPENCODE_SERVER_USERNAME=opencode
-set OPENCODE_SERVER_PASSWORD=your-password
-npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096</pre>
+                {config.backend === "omp" ? (
+                  <>
+                    <h4>OMP bridge (macOS / Linux)</h4>
+                    <pre>npx --yes ./bridge --host 0.0.0.0 --port 4097 --username omp --password your-password --root "$PWD"</pre>
+                  </>
+                ) : (
+                  <>
+                    <h4>OpenCode server (macOS / Linux)</h4>
+                    <pre>OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD=your-password npx -y opencode-ai serve --hostname 0.0.0.0 --port 4096</pre>
+                  </>
+                )}
               </div>
-              
-              <div className="help-note">
-                <strong>🔧 Browser Debugging:</strong>
-                <p>Add CORS origins for browser testing:</p>
-                <pre>--cors http://localhost:5173 --cors http://127.0.0.1:5173</pre>
-              </div>
+              <p>
+                <a
+                  href={`https://github.com/gervaso-assistant/opencode-remote-android#${config.backend === "omp" ? "oh-my-pi-bridge-setup" : "opencode-server-setup"}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open the complete {config.backend === "omp" ? "OMP bridge" : "OpenCode server"} guide in the repository
+                </a>
+              </p>
             </div>
           )}
 
