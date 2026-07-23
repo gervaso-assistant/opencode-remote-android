@@ -126,11 +126,10 @@ export class OmpService {
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
     const revision = session.updatedAt ?? ""
-    const stale = this.#loadedAt.has(sessionID) && this.#loadedAt.get(sessionID) !== revision
-    if (!stale && this.#loadedAt.get(sessionID) === revision) return
+    if (this.#loadedAt.get(sessionID) === revision) return
     let loading = this.#loads.get(sessionID)
     if (!loading) {
-      loading = this.#loadSession(sessionID, revision, stale)
+      loading = this.#loadSession(sessionID, revision)
       this.#loads.set(sessionID, loading)
     }
     try {
@@ -140,27 +139,14 @@ export class OmpService {
     }
   }
 
-  async #loadSession(sessionID, revision, stale) {
+  async #loadSession(sessionID, revision) {
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
-    const historyAcp = stale && typeof this.#acp.createPeer === "function" ? this.#acp.createPeer() : this.#acp
-    const forwardNotification = (notification) => this.#handleNotification(notification)
-    if (historyAcp !== this.#acp) {
-      historyAcp.on("notification", forwardNotification)
-      await historyAcp.start()
-    }
     this.#messages.set(sessionID, [])
     this.#todos.set(sessionID, [])
-    try {
-      const result = await historyAcp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
-      this.#rememberConfigOptions(sessionID, result.configOptions)
-      this.#loadedAt.set(sessionID, revision)
-    } finally {
-      if (historyAcp !== this.#acp) {
-        historyAcp.off("notification", forwardNotification)
-        historyAcp.close()
-      }
-    }
+    const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
+    this.#rememberConfigOptions(sessionID, result.configOptions)
+    this.#loadedAt.set(sessionID, revision)
   }
 
   async #refreshSessions() {

@@ -129,7 +129,7 @@ Completato:
 - svuotamento immediato di sessione e stato quando viene salvata una configurazione backend diversa;
 - bridge: catalogo modelli OMP per una sessione attiva, applicazione tramite `session/set_config_option`, caricamento concorrente sincronizzato e messaggi utente registrati prima dello streaming assistant;
 - UI OMP senza selettore agenti fittizio.
-- bridge `v0.1.4` distribuibile come `opencode-remote-omp-0.1.4.tgz`, con handshake ACP, errori/notifiche, restart, Basic Auth, mapping sessioni, refresh cronologia per revisione ACP e confinamento `--root`;
+- bridge `v0.1.5` distribuibile come `opencode-remote-omp-0.1.5.tgz`, con handshake ACP, errori/notifiche, restart, Basic Auth, mapping sessioni, refresh cronologia per revisione ACP e confinamento `--root`;
 - smoke reale contro OMP `v17.0.8` per health, discovery e ripristino della cronologia via `session/load`.
 
 Ancora intenzionalmente non supportato: rinomina/eliminazione persistente di una sessione OMP, comandi server OpenCode, agenti OMP configurabili, diff/VCS e accesso filesystem fuori dalle root consentite.
@@ -158,7 +158,7 @@ Ancora intenzionalmente non supportato: rinomina/eliminazione persistente di una
 
 **Prova:** regressione HTTP che inverte intenzionalmente le notifiche ACP (assistant, poi user) e verifica la sequenza restituita: user, assistant.
 
-**Persistenza verificata:** un bridge nuovo, senza cache in memoria, ha riaperto due sessioni OMP reali e ha ricevuto da ACP entrambi i messaggi user e assistant nell'ordine corretto. Il bridge `v0.1.4` usa un client ACP isolato per ricaricare una revisione esterna più recente, evitando sia cache parziali sia l'interruzione del processo ACP che gestisce prompt attivi.
+**Persistenza verificata:** un bridge nuovo, senza cache in memoria, ha riaperto due sessioni OMP reali e ha ricevuto da ACP entrambi i messaggi user e assistant nell'ordine corretto. Il bridge `v0.1.5` ricarica una revisione esterna con il client ACP principale senza riavviarlo, evitando cache parziali e l'interruzione di prompt attivi.
 
 ## Sicurezza
 

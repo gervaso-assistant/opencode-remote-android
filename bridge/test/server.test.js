@@ -88,7 +88,6 @@ class ReplayAcp extends EventEmitter {
 class FreshnessAcp extends EventEmitter {
   agentInfo = { version: "17.0.8" }
   revision = "2026-07-23T00:00:00.000Z"
-  peers = 0
   history = [
     { role: "user", id: "first-user", text: "First prompt" },
     { role: "assistant", id: "first-assistant", text: "First response" }
@@ -96,17 +95,6 @@ class FreshnessAcp extends EventEmitter {
 
   async start() {}
 
-  createPeer() {
-    this.peers += 1
-    const peer = new EventEmitter()
-    peer.start = async () => {}
-    peer.request = async (method) => {
-      if (method === "session/load") this.#replay(peer)
-      return {}
-    }
-    peer.close = () => {}
-    return peer
-  }
 
   async listSessions() {
     return [{ sessionId: "session-1", title: "Freshness", cwd: process.cwd(), updatedAt: this.revision }]
@@ -117,9 +105,9 @@ class FreshnessAcp extends EventEmitter {
     return {}
   }
 
-  #replay(target) {
+  #replay() {
     for (const message of this.history) {
-      target.emit("notification", {
+      this.emit("notification", {
         method: "session/update",
         params: {
           sessionId: "session-1",
@@ -313,7 +301,6 @@ test("reloads a stale session history after ACP reports a newer revision", async
   try {
     const first = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
     assert.equal((await first.json()).length, 2)
-
     acp.advance()
     const refreshed = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
     assert.deepEqual((await refreshed.json()).map((message) => message.parts[0].text), [
@@ -322,7 +309,6 @@ test("reloads a stale session history after ACP reports a newer revision", async
       "Second prompt",
       "Second response"
     ])
-    assert.equal(acp.peers, 1)
   } finally {
     await bridge.close()
   }
