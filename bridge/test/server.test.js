@@ -88,12 +88,17 @@ class ReplayAcp extends EventEmitter {
 class FreshnessAcp extends EventEmitter {
   agentInfo = { version: "17.0.8" }
   revision = "2026-07-23T00:00:00.000Z"
+  restarts = 0
   history = [
     { role: "user", id: "first-user", text: "First prompt" },
     { role: "assistant", id: "first-assistant", text: "First response" }
   ]
 
   async start() {}
+
+  async restart() {
+    this.restarts += 1
+  }
 
   async listSessions() {
     return [{ sessionId: "session-1", title: "Freshness", cwd: process.cwd(), updatedAt: this.revision }]
@@ -306,6 +311,7 @@ test("reloads a stale session history after ACP reports a newer revision", async
       "Second prompt",
       "Second response"
     ])
+    assert.equal(acp.restarts, 1)
   } finally {
     await bridge.close()
   }

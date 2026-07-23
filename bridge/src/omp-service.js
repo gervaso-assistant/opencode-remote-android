@@ -126,10 +126,11 @@ export class OmpService {
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
     const revision = session.updatedAt ?? ""
-    if (this.#loadedAt.get(sessionID) === revision) return
+    const stale = this.#loadedAt.has(sessionID) && this.#loadedAt.get(sessionID) !== revision
+    if (!stale && this.#loadedAt.get(sessionID) === revision) return
     let loading = this.#loads.get(sessionID)
     if (!loading) {
-      loading = this.#loadSession(sessionID, revision)
+      loading = this.#loadSession(sessionID, revision, stale)
       this.#loads.set(sessionID, loading)
     }
     try {
@@ -139,7 +140,12 @@ export class OmpService {
     }
   }
 
-  async #loadSession(sessionID, revision) {
+  async #loadSession(sessionID, revision, stale) {
+    if (stale && this.#active.size === 0 && typeof this.#acp.restart === "function") {
+      await this.#acp.restart()
+      await this.#refreshSessions()
+      revision = this.#sessions.get(sessionID)?.updatedAt ?? revision
+    }
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
     this.#messages.set(sessionID, [])

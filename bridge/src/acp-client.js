@@ -54,7 +54,7 @@ export class AcpClient extends EventEmitter {
       const initialized = await this.request("initialize", {
         protocolVersion: 1,
         clientCapabilities: {},
-        clientInfo: { name: "opencode-remote-omp", version: "0.1.2" }
+        clientInfo: { name: "opencode-remote-omp", version: "0.1.3" }
       }, START_TIMEOUT_MS)
       this.#agentInfo = initialized.agentInfo
       const authMethod = initialized.authMethods?.find((method) => method.id === "agent")
@@ -100,6 +100,11 @@ export class AcpClient extends EventEmitter {
     await this.start()
     const result = await this.request("session/list", {})
     return result.sessions ?? []
+  }
+
+  async restart() {
+    this.close()
+    await this.start()
   }
 
   close() {
