@@ -9,7 +9,8 @@ test("defaults to a loopback-only unauthenticated listener", () => {
     username: "",
     password: "",
     ompBin: "omp",
-    roots: []
+    roots: [],
+    logRequests: false
   })
 })
 
@@ -28,4 +29,9 @@ test("accepts authenticated LAN configuration and repeated roots", () => {
   ], {})
   assert.equal(config.port, 4900)
   assert.deepEqual(config.roots, ["/work/a", "/work/b"])
+})
+
+test("enables safe request diagnostics explicitly", () => {
+  assert.equal(parseConfig(["--log-requests"], {}).logRequests, true)
+  assert.equal(parseConfig([], { OMP_BRIDGE_LOG_REQUESTS: "1" }).logRequests, true)
 })

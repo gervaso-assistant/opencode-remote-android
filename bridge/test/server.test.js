@@ -7,6 +7,12 @@ import { createBridgeServer } from "../src/server.js"
 class FakeAcp extends EventEmitter {
   agentInfo = { version: "17.0.7" }
   starts = 0
+  loadStarts = 0
+  #resolveLoadStarted
+  #releaseLoad
+  loadStarted = new Promise((resolve) => {
+    this.#resolveLoadStarted = resolve
+  })
 
   async start() {
     this.starts += 1
@@ -16,15 +22,70 @@ class FakeAcp extends EventEmitter {
     return [{ sessionId: "session-1", title: "Test", cwd: process.cwd(), updatedAt: "2026-07-22T00:00:00.000Z" }]
   }
 
-  async request() {
+  async request(method) {
+    if (method !== "session/load") return {}
+    this.loadStarts += 1
+    this.#resolveLoadStarted()
+    await new Promise((resolve) => {
+      this.#releaseLoad = resolve
+    })
+    return {
+      configOptions: [{
+        id: "model",
+        currentValue: "omp/default",
+        options: [{ value: "omp/default", name: "OMP Default" }]
+      }]
+    }
+  }
+
+  releaseLoad() {
+    this.#releaseLoad?.()
+  }
+
+  notify() {}
+}
+
+class ReplayAcp extends EventEmitter {
+  agentInfo = { version: "17.0.8" }
+
+  async start() {}
+
+  async listSessions() {
+    return [{ sessionId: "session-1", title: "Persisted", cwd: process.cwd(), updatedAt: "2026-07-23T00:00:00.000Z" }]
+  }
+
+  async request(method) {
+    if (method === "session/load") {
+      this.emit("notification", {
+        method: "session/update",
+        params: {
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: "user_message_chunk",
+            messageId: "persisted-user",
+            content: { type: "text", text: "Persist this prompt" }
+          }
+        }
+      })
+      this.emit("notification", {
+        method: "session/update",
+        params: {
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "persisted-assistant",
+            content: { type: "text", text: "Persist this response" }
+          }
+        }
+      })
+    }
     return {}
   }
 
   notify() {}
 }
 
-async function startServer(options = {}) {
-  const acp = new FakeAcp()
+async function startServer({ acp = new FakeAcp(), ...options } = {}) {
   const server = createBridgeServer({
     acp,
     config: {
@@ -83,6 +144,105 @@ test("confines file browsing to configured roots", async () => {
     const outside = await fetch(`${bridge.baseURL}/file?path=${encodeURIComponent(path.dirname(process.cwd()))}`, { headers: authHeaders() })
     assert.equal(outside.status, 400)
     assert.match((await outside.json()).error, /configured --root boundary/)
+  } finally {
+    await bridge.close()
+  }
+})
+
+test("waits for a concurrent ACP session load before returning configured models", async () => {
+  const bridge = await startServer()
+  try {
+    const messages = fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    await bridge.acp.loadStarted
+
+    let modelsSettled = false
+    const models = fetch(`${bridge.baseURL}/config/providers?directory=${encodeURIComponent(process.cwd())}&sessionID=session-1`, { headers: authHeaders() })
+      .then(async (response) => {
+        modelsSettled = true
+        return response.json()
+      })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(modelsSettled, false)
+
+    bridge.acp.releaseLoad()
+    assert.deepEqual(await models, {
+      providers: [{
+        id: "omp",
+        name: "omp",
+        models: {
+          default: { id: "default", name: "OMP Default", status: "active" }
+        }
+      }],
+      default: { omp: "default" }
+    })
+    await messages
+    assert.equal(bridge.acp.loadStarts, 1)
+  } finally {
+    bridge.acp.releaseLoad()
+    await bridge.close()
+  }
+})
+
+test("records the submitted user prompt before asynchronous ACP assistant updates", async () => {
+  const bridge = await startServer()
+  try {
+    const prompt = fetch(`${bridge.baseURL}/session/session-1/prompt_async`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ parts: [{ type: "text", text: "Explain the fix" }] })
+    })
+    await bridge.acp.loadStarted
+    bridge.acp.releaseLoad()
+    assert.equal((await prompt).status, 200)
+
+    bridge.acp.emit("notification", {
+      method: "session/update",
+      params: {
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "acp-assistant-message",
+          content: { type: "text", text: "The messages are now ordered." }
+        }
+      }
+    })
+    bridge.acp.emit("notification", {
+      method: "session/update",
+      params: {
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "user_message_chunk",
+          messageId: "acp-user-message",
+          content: { type: "text", text: "Explain the fix" }
+        }
+      }
+    })
+
+    const messages = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    assert.deepEqual((await messages.json()).map((message) => ({
+      role: message.info.role,
+      text: message.parts[0].text
+    })), [
+      { role: "user", text: "Explain the fix" },
+      { role: "assistant", text: "The messages are now ordered." }
+    ])
+  } finally {
+    bridge.acp.releaseLoad()
+    await bridge.close()
+  }
+})
+
+test("replays persistent user and assistant history when reopening an OMP session", async () => {
+  const bridge = await startServer({ acp: new ReplayAcp() })
+  try {
+    const response = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    assert.deepEqual((await response.json()).map((message) => ({
+      role: message.info.role,
+      text: message.parts[0].text
+    })), [
+      { role: "user", text: "Persist this prompt" },
+      { role: "assistant", text: "Persist this response" }
+    ])
   } finally {
     await bridge.close()
   }

@@ -1,9 +1,9 @@
-# OpenCode Remote
+# Harness Remote
 
-OpenCode Remote is a companion app that lets you control your OpenCode server from phone or desktop, even when you are not at your main workstation.
-It is designed to make daily usage simple: connect to your server, check active sessions, see progress, send new prompts or slash commands, and stop a running action when needed.
+Harness Remote is a companion app for controlling supported coding-agent backends—currently OpenCode and OMP—from phone or desktop, even when you are not at your main workstation.
+It is designed to make daily usage simple: connect to a backend, check active sessions, see progress, send new prompts or slash commands, and stop a running action when supported.
 
-> **Note for AI/harness systems**: This repository is self-documenting. To configure OpenCode server and the app autonomously, point your AI assistant to this repository URL (`https://github.com/giuliastro/opencode-remote-android`) or this README and ask it to set up OpenCode for use with OpenCode Remote. The AI can execute all steps from the sections below.
+> **Note for AI/harness systems**: This repository is self-documenting. To configure a supported backend and the app autonomously, point your AI assistant to this repository URL (`https://github.com/giuliastro/opencode-remote-android`) or this README and ask it to set up Harness Remote.
 
 ## Screenshots
 

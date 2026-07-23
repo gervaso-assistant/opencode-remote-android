@@ -84,6 +84,9 @@ export function createBridgeServer({ config, acp }) {
 
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`)
     const directory = url.searchParams.get("directory") || undefined
+    if (config.logRequests && url.pathname === "/config/providers") {
+      process.stderr.write(`[bridge] ${request.method} ${url.pathname}${url.search}\n`)
+    }
     try {
       if (request.method === "GET" && (url.pathname === "/v1/health" || url.pathname === "/global/health")) {
         await acp.start()

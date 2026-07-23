@@ -120,7 +120,7 @@ jobs:
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-remote-release-apk-v${{ steps.version.outputs.app_version }}
+          name: harness-remote-release-apk-v${{ steps.version.outputs.app_version }}
           path: ${{ steps.apk.outputs.path }}
 
       - name: Publish GitHub release
@@ -128,12 +128,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: OpenCode Remote v${{ steps.version.outputs.app_version }}
+          name: Harness Remote v${{ steps.version.outputs.app_version }}
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
           body: |
             ## Release
-            Stable Android release APK for OpenCode Remote `${{ steps.version.outputs.app_version }}`.
+            Stable Android release APK for Harness Remote `${{ steps.version.outputs.app_version }}`.
 
             ## Notes
             - Built from `${{ github.sha }}`

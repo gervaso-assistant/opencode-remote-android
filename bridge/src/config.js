@@ -21,7 +21,8 @@ export function parseConfig(args, environment = process.env) {
     username: environment.OMP_BRIDGE_USERNAME ?? "",
     password: environment.OMP_BRIDGE_PASSWORD ?? "",
     ompBin: environment.OMP_BRIDGE_OMP_BIN ?? "omp",
-    roots: environment.OMP_BRIDGE_ROOT ? [environment.OMP_BRIDGE_ROOT] : []
+    roots: environment.OMP_BRIDGE_ROOT ? [environment.OMP_BRIDGE_ROOT] : [],
+    logRequests: environment.OMP_BRIDGE_LOG_REQUESTS === "1"
   }
 
   for (let index = 0; index < args.length; index += 1) {
@@ -51,6 +52,9 @@ export function parseConfig(args, environment = process.env) {
         config.roots.push(requireValue(args, index, option))
         index += 1
         break
+      case "--log-requests":
+        config.logRequests = true
+        break
       case "--help":
         config.help = true
         break
@@ -69,5 +73,5 @@ export function parseConfig(args, environment = process.env) {
 }
 
 export function usage() {
-  return `Usage: opencode-remote-omp [options]\n\nOptions:\n  --host <host>          Bind host (default: 127.0.0.1)\n  --port <port>          Bind port (default: 4097)\n  --username <username>  Enable HTTP Basic Auth\n  --password <password>  Enable HTTP Basic Auth\n  --omp-bin <path>       OMP executable (default: omp)\n  --root <path>          Allowed worktree root; repeatable\n  --help                 Show this help`
+  return `Usage: opencode-remote-omp [options]\n\nOptions:\n  --host <host>          Bind host (default: 127.0.0.1)\n  --port <port>          Bind port (default: 4097)\n  --username <username>  Enable HTTP Basic Auth\n  --password <password>  Enable HTTP Basic Auth\n  --omp-bin <path>       OMP executable (default: omp)\n  --root <path>          Allowed worktree root; repeatable\n  --log-requests         Log request method, path, and query\n  --help                 Show this help`
 }

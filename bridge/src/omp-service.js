@@ -23,6 +23,9 @@ export class OmpService {
   #messages = new Map()
   #todos = new Map()
   #configOptions = new Map()
+  #loaded = new Set()
+  #loads = new Map()
+  #promptAcknowledgements = new Map()
   #active = new Set()
   #listeners = new Set()
 
@@ -48,6 +51,7 @@ export class OmpService {
     await this.#acp.start()
     const result = await this.#acp.request("session/new", { cwd: directory, mcpServers: [] })
     this.#rememberConfigOptions(result.sessionId, result.configOptions)
+    this.#loaded.add(result.sessionId)
     const session = {
       sessionId: result.sessionId,
       cwd: directory,
@@ -93,6 +97,7 @@ export class OmpService {
     await this.#load(sessionID)
     if (model) await this.setModel(sessionID, model)
     if (this.#active.has(sessionID)) throw new Error("The OMP session is already running")
+    this.#recordPrompt(sessionID, text)
     this.#active.add(sessionID)
     this.#emit("session.updated", sessionID)
     void this.#acp.request("session/prompt", {
@@ -116,18 +121,54 @@ export class OmpService {
   }
 
   async #load(sessionID) {
-    if (this.#messages.has(sessionID)) return
+    if (this.#loaded.has(sessionID)) return
+    let loading = this.#loads.get(sessionID)
+    if (!loading) {
+      loading = this.#loadSession(sessionID)
+      this.#loads.set(sessionID, loading)
+    }
+    try {
+      await loading
+    } finally {
+      if (this.#loads.get(sessionID) === loading) this.#loads.delete(sessionID)
+    }
+  }
+
+  async #loadSession(sessionID) {
     if (!this.#sessions.has(sessionID)) await this.listSessions()
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
-    this.#messages.set(sessionID, [])
-    this.#todos.set(sessionID, [])
+    this.#messages.set(sessionID, this.#messages.get(sessionID) ?? [])
+    this.#todos.set(sessionID, this.#todos.get(sessionID) ?? [])
     const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
     this.#rememberConfigOptions(sessionID, result.configOptions)
+    this.#loaded.add(sessionID)
   }
 
   #rememberConfigOptions(sessionID, configOptions) {
     if (Array.isArray(configOptions)) this.#configOptions.set(sessionID, configOptions)
+  }
+
+  #recordPrompt(sessionID, text) {
+    const messageID = randomUUID()
+    const messages = this.#messages.get(sessionID) ?? []
+    this.#messages.set(sessionID, messages)
+    messages.push({
+      info: { id: messageID, role: "user", sessionID, time: { created: Date.now() } },
+      parts: [{ id: `${messageID}:text`, type: "text", text }]
+    })
+    this.#promptAcknowledgements.set(sessionID, { text, received: "" })
+    this.#emit("message.updated", sessionID)
+  }
+
+  #isAcknowledgedPromptChunk(sessionID, text) {
+    const acknowledgement = this.#promptAcknowledgements.get(sessionID)
+    if (!acknowledgement) return false
+    const received = acknowledgement.received + text
+    if (!acknowledgement.text.startsWith(received)) return false
+    acknowledgement.received = received
+    if (received === acknowledgement.text) this.#promptAcknowledgements.delete(sessionID)
+    return true
   }
 
   #handleNotification({ method, params }) {
@@ -149,6 +190,7 @@ export class OmpService {
     if (update.sessionUpdate !== "user_message_chunk" && update.sessionUpdate !== "agent_message_chunk") return
     if (update.content?.type !== "text" || !update.content.text) return
     const role = update.sessionUpdate === "user_message_chunk" ? "user" : "assistant"
+    if (role === "user" && this.#isAcknowledgedPromptChunk(sessionId, update.content.text)) return
     const messageID = update.messageId ?? randomUUID()
     const messages = this.#messages.get(sessionId) ?? []
     this.#messages.set(sessionId, messages)

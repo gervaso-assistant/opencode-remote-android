@@ -1,5 +1,9 @@
 # Piano di integrazione Oh My Pi
 
+## Identità prodotto
+
+**Nome prodotto:** Harness Remote. OpenCode e OMP sono backend selezionabili; i loro nomi restano nei riferimenti a protocolli, comandi e contratti specifici.
+
 ## Decisione
 
 L'app non può collegarsi direttamente a OMP: oggi parla l'API HTTP/SSE di OpenCode, mentre OMP espone ACP su stdio tramite `omp acp`. Serve quindi un bridge locale minimale, nello stesso repository, che traduca HTTP/SSE in ACP. Il bridge non deve mai leggere o modificare direttamente `~/.omp/agent/*.db`.
@@ -123,40 +127,38 @@ Completato:
 - directory browser confinato alle root `--root`;
 - selezione OpenCode/OMP nella configurazione Android, con porta e username predefiniti corretti;
 - svuotamento immediato di sessione e stato quando viene salvata una configurazione backend diversa;
-- bridge: catalogo modelli OMP per una sessione attiva e applicazione tramite `session/set_config_option`; il caricamento nell'APK resta bloccato, vedi il blocco sotto.
+- bridge: catalogo modelli OMP per una sessione attiva, applicazione tramite `session/set_config_option`, caricamento concorrente sincronizzato e messaggi utente registrati prima dello streaming assistant;
 - UI OMP senza selettore agenti fittizio.
-- suite bridge con handshake ACP, errori/notifiche, restart, Basic Auth, mapping sessioni e confinamento `--root`;
-- smoke test reale contro OMP `v17.0.7` per health e discovery sessioni.
+- bridge `v0.1.1` distribuibile come `opencode-remote-omp-0.1.1.tgz`, con handshake ACP, errori/notifiche, restart, Basic Auth, mapping sessioni e confinamento `--root`;
+- smoke reale contro OMP `v17.0.8` per health, discovery e ripristino della cronologia via `session/load`.
 
 Ancora intenzionalmente non supportato: rinomina/eliminazione persistente di una sessione OMP, comandi server OpenCode, agenti OMP configurabili, diff/VCS e accesso filesystem fuori dalle root consentite.
 
-## Blocco attivo: pannello AI Model OMP
+## Risoluzione: pannello AI Model OMP
 
-**Stato:** irrisolto. Fermare qui le modifiche speculative.
+**Causa dimostrata:** due richieste HTTP concorrenti per una sessione esistente (`/session/:id/message` e `/config/providers?...&sessionID=:id`) potevano entrambe entrare in `OmpService.#load`. La prima registrava prematuramente la cache dei messaggi e attendeva `session/load`; la seconda scambiava quella cache per una sessione già caricata, leggeva `configOptions` ancora assenti e il bridge restituiva `providers: []`. L'app mostra una lista vuota come `Loading configured models...`.
 
-**Sintomo nell'APK:** aprendo una sessione OMP, il pannello sotto Project resta su `Loading configured models...`. OpenCode continua a caricare correttamente i modelli.
+**Correzione:** `OmpService` mantiene ora sia le sessioni caricate sia le promesse di caricamento in corso. Tutti i consumatori della stessa sessione attendono la medesima richiesta ACP `session/load`; solo dopo la risposta vengono esposti modelli e messaggi.
 
-**Osservazioni confermate:**
+**Prove eseguite:**
 
-- il bridge risponde a `GET /config/providers?directory=<directory>&sessionID=<id>` con 3 provider e il modello predefinito OMP;
-- il bridge richiede `sessionID` per restituire il catalogo OMP;
-- build TypeScript e regressioni web passano, ma non riproducono il trasporto HTTP nativo Capacitor dell'APK.
+- test HTTP di regressione del bridge con `session/load` deliberatamente ritardato: `/config/providers` resta in attesa, poi restituisce il provider e il modello predefinito; viene inviata una sola richiesta ACP;
+- suite bridge completa: 13 test superati;
+- build TypeScript, regressioni web, sync Capacitor Android superati;
+- bundle `dist` e asset dentro l'APK debug esistente hanno lo stesso SHA-256;
+- smoke reale con OMP `v17.0.8`: health riuscito; `--log-requests` ha registrato `GET /config/providers` con `directory` e `sessionID`, senza password o prompt.
 
-**Tentativi già fatti, senza risolvere il comportamento nell'APK:**
+**Limite dell'ambiente:** non sono disponibili né `adb` né Android SDK (`ANDROID_HOME`/`sdk.dir`); quindi non è stato possibile installare l'APK né acquisire logcat in questa workstation. La correzione del comportamento bridge è coperta dal test concorrente, ma la verifica manuale nativa resta da eseguire su un host con dispositivo e SDK.
 
-1. aggiunto `sessionID` alla richiesta `api.listModels` quando il backend è OMP;
-2. passato esplicitamente `(sessionID, directory)` a `loadModels` all'apertura e alla creazione della sessione;
-3. aggiunto un effetto React che ricarica i modelli dopo il cambio di `selectedSession.id` e soppresso il caricamento OMP privo di sessione nell'effetto generale di connessione.
+## Risoluzione: ordine messaggi OMP
 
-**Punto di ripresa obbligatorio:**
+**Causa dimostrata:** `session/prompt` avviava ACP in background e affidava il messaggio utente alla notifica `user_message_chunk`. ACP può invece consegnare un chunk assistant prima di quella notifica; la chat riceveva quindi assistant, poi user.
 
-1. confermare che l'APK installato contiene il bundle più recente dopo `npm run build` e `npm run cap:sync:android`; introdurre un identificatore di build visibile temporaneo se necessario;
-2. aggiungere logging temporaneo, senza password o prompt, nel bridge per registrare metodo, path e query di `/config/providers`, verificando dall'APK se arriva `sessionID`;
-3. acquisire logcat Android e l'errore effettivo di `loadModels`; il pannello mostra \"Loading\" anche per una lista vuota, quindi il sintomo non distingue richiesta assente, query errata e risposta vuota;
-4. riprodurre con un test di integrazione Capacitor/native HTTP o con un client che invii esattamente la richiesta APK;
-5. solo dopo la prova precedente, correggere il punto dimostrato e aggiungere un test di regressione comportamentale.
+**Correzione:** il bridge registra il prompt utente localmente e lo espone prima di avviare `session/prompt`. I chunk user ACP corrispondenti vengono riconosciuti e non duplicano il messaggio, anche se arrivano dopo il primo chunk assistant.
 
-**File coinvolti:** `web/src/App.tsx` (`loadModels`, effetti di selezione sessione), `web/src/api.ts` (`listModels`), `bridge/src/server.js` (`/config/providers`), `bridge/src/omp-service.js` (`models`).
+**Prova:** regressione HTTP che inverte intenzionalmente le notifiche ACP (assistant, poi user) e verifica la sequenza restituita: user, assistant.
+
+**Persistenza verificata:** un bridge nuovo, senza cache in memoria, ha riaperto due sessioni OMP reali e ha ricevuto da ACP entrambi i messaggi user e assistant nell'ordine corretto. Le sessioni aperte con una versione bridge antecedente alla correzione restano vulnerabili; distribuire e riavviare il bridge `v0.1.1` è necessario insieme all'APK.
 
 ## Sicurezza
 
