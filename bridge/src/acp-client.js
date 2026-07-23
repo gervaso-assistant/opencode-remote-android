@@ -24,6 +24,10 @@ export class AcpClient extends EventEmitter {
     return this.#agentInfo
   }
 
+  createPeer() {
+    return new AcpClient({ ompBin: this.#ompBin, spawnProcess: this.#spawn })
+  }
+
   async start() {
     if (this.#child) return
     if (this.#starting) return this.#starting
@@ -54,7 +58,7 @@ export class AcpClient extends EventEmitter {
       const initialized = await this.request("initialize", {
         protocolVersion: 1,
         clientCapabilities: {},
-        clientInfo: { name: "opencode-remote-omp", version: "0.1.3" }
+        clientInfo: { name: "opencode-remote-omp", version: "0.1.4" }
       }, START_TIMEOUT_MS)
       this.#agentInfo = initialized.agentInfo
       const authMethod = initialized.authMethods?.find((method) => method.id === "agent")
@@ -102,10 +106,6 @@ export class AcpClient extends EventEmitter {
     return result.sessions ?? []
   }
 
-  async restart() {
-    this.close()
-    await this.start()
-  }
 
   close() {
     const child = this.#child

@@ -88,7 +88,7 @@ class ReplayAcp extends EventEmitter {
 class FreshnessAcp extends EventEmitter {
   agentInfo = { version: "17.0.8" }
   revision = "2026-07-23T00:00:00.000Z"
-  restarts = 0
+  peers = 0
   history = [
     { role: "user", id: "first-user", text: "First prompt" },
     { role: "assistant", id: "first-assistant", text: "First response" }
@@ -96,8 +96,16 @@ class FreshnessAcp extends EventEmitter {
 
   async start() {}
 
-  async restart() {
-    this.restarts += 1
+  createPeer() {
+    this.peers += 1
+    const peer = new EventEmitter()
+    peer.start = async () => {}
+    peer.request = async (method) => {
+      if (method === "session/load") this.#replay(peer)
+      return {}
+    }
+    peer.close = () => {}
+    return peer
   }
 
   async listSessions() {
@@ -105,9 +113,13 @@ class FreshnessAcp extends EventEmitter {
   }
 
   async request(method) {
-    if (method !== "session/load") return {}
+    if (method === "session/load") this.#replay(this)
+    return {}
+  }
+
+  #replay(target) {
     for (const message of this.history) {
-      this.emit("notification", {
+      target.emit("notification", {
         method: "session/update",
         params: {
           sessionId: "session-1",
@@ -119,7 +131,6 @@ class FreshnessAcp extends EventEmitter {
         }
       })
     }
-    return {}
   }
 
   advance() {
@@ -311,7 +322,7 @@ test("reloads a stale session history after ACP reports a newer revision", async
       "Second prompt",
       "Second response"
     ])
-    assert.equal(acp.restarts, 1)
+    assert.equal(acp.peers, 1)
   } finally {
     await bridge.close()
   }

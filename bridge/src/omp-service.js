@@ -141,18 +141,26 @@ export class OmpService {
   }
 
   async #loadSession(sessionID, revision, stale) {
-    if (stale && this.#active.size === 0 && typeof this.#acp.restart === "function") {
-      await this.#acp.restart()
-      await this.#refreshSessions()
-      revision = this.#sessions.get(sessionID)?.updatedAt ?? revision
-    }
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
+    const historyAcp = stale && typeof this.#acp.createPeer === "function" ? this.#acp.createPeer() : this.#acp
+    const forwardNotification = (notification) => this.#handleNotification(notification)
+    if (historyAcp !== this.#acp) {
+      historyAcp.on("notification", forwardNotification)
+      await historyAcp.start()
+    }
     this.#messages.set(sessionID, [])
     this.#todos.set(sessionID, [])
-    const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
-    this.#rememberConfigOptions(sessionID, result.configOptions)
-    this.#loadedAt.set(sessionID, revision)
+    try {
+      const result = await historyAcp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
+      this.#rememberConfigOptions(sessionID, result.configOptions)
+      this.#loadedAt.set(sessionID, revision)
+    } finally {
+      if (historyAcp !== this.#acp) {
+        historyAcp.off("notification", forwardNotification)
+        historyAcp.close()
+      }
+    }
   }
 
   async #refreshSessions() {
