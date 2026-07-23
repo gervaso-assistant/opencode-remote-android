@@ -25,10 +25,12 @@ class FakeAcp extends EventEmitter {
   async request(method) {
     if (method !== "session/load") return {}
     this.loadStarts += 1
-    this.#resolveLoadStarted()
-    await new Promise((resolve) => {
-      this.#releaseLoad = resolve
-    })
+    if (this.loadStarts === 1) {
+      this.#resolveLoadStarted()
+      await new Promise((resolve) => {
+        this.#releaseLoad = resolve
+      })
+    }
     return {
       configOptions: [{
         id: "model",
@@ -126,6 +128,13 @@ class FreshnessAcp extends EventEmitter {
     this.history.push(
       { role: "user", id: "second-user", text: "Second prompt" },
       { role: "assistant", id: "second-assistant", text: "Second response" }
+    )
+  }
+
+  appendWithoutRevision() {
+    this.history.push(
+      { role: "user", id: "third-user", text: "Third prompt" },
+      { role: "assistant", id: "third-assistant", text: "Third response" }
     )
   }
 
@@ -308,6 +317,16 @@ test("reloads a stale session history after ACP reports a newer revision", async
       "First response",
       "Second prompt",
       "Second response"
+    ])
+    acp.appendWithoutRevision()
+    const unchangedRevision = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    assert.deepEqual((await unchangedRevision.json()).map((message) => message.parts[0].text), [
+      "First prompt",
+      "First response",
+      "Second prompt",
+      "Second response",
+      "Third prompt",
+      "Third response"
     ])
   } finally {
     await bridge.close()

@@ -26,6 +26,7 @@ export class OmpService {
   #loadedAt = new Map()
   #loads = new Map()
   #sessionListing
+  #replaying = new Set()
   #promptAcknowledgements = new Map()
   #active = new Set()
   #listeners = new Set()
@@ -69,7 +70,7 @@ export class OmpService {
 
   async messages(sessionID) {
     await this.#refreshSessions()
-    await this.#load(sessionID)
+    await this.#load(sessionID, true)
     return this.#messages.get(sessionID) ?? []
   }
 
@@ -121,12 +122,13 @@ export class OmpService {
     return { type: this.#active.has(sessionID) ? "busy" : "idle" }
   }
 
-  async #load(sessionID) {
+  async #load(sessionID, force = false) {
     if (!this.#sessions.has(sessionID)) await this.listSessions()
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
     const revision = session.updatedAt ?? ""
-    if (this.#loadedAt.get(sessionID) === revision) return
+    if (!force && this.#loadedAt.get(sessionID) === revision) return
+    // The bridge must replay messages even when OMP leaves updatedAt unchanged.
     let loading = this.#loads.get(sessionID)
     if (!loading) {
       loading = this.#loadSession(sessionID, revision)
@@ -142,11 +144,14 @@ export class OmpService {
   async #loadSession(sessionID, revision) {
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
-    this.#messages.set(sessionID, [])
-    this.#todos.set(sessionID, [])
-    const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
-    this.#rememberConfigOptions(sessionID, result.configOptions)
-    this.#loadedAt.set(sessionID, revision)
+    this.#replaying.add(sessionID)
+    try {
+      const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
+      this.#rememberConfigOptions(sessionID, result.configOptions)
+      this.#loadedAt.set(sessionID, revision)
+    } finally {
+      this.#replaying.delete(sessionID)
+    }
   }
 
   async #refreshSessions() {
@@ -192,6 +197,10 @@ export class OmpService {
     const { sessionId, update } = params
     const session = this.#sessions.get(sessionId)
     if (session) session.updatedAt = new Date().toISOString()
+    if (this.#replaying.delete(sessionId)) {
+      this.#messages.set(sessionId, [])
+      this.#todos.set(sessionId, [])
+    }
     if (update.sessionUpdate === "plan") {
       const todos = update.entries.map((entry, index) => ({
         id: `${sessionId}:${index}`,
