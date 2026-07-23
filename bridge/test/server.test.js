@@ -85,6 +85,49 @@ class ReplayAcp extends EventEmitter {
   notify() {}
 }
 
+class FreshnessAcp extends EventEmitter {
+  agentInfo = { version: "17.0.8" }
+  revision = "2026-07-23T00:00:00.000Z"
+  history = [
+    { role: "user", id: "first-user", text: "First prompt" },
+    { role: "assistant", id: "first-assistant", text: "First response" }
+  ]
+
+  async start() {}
+
+  async listSessions() {
+    return [{ sessionId: "session-1", title: "Freshness", cwd: process.cwd(), updatedAt: this.revision }]
+  }
+
+  async request(method) {
+    if (method !== "session/load") return {}
+    for (const message of this.history) {
+      this.emit("notification", {
+        method: "session/update",
+        params: {
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: message.role === "assistant" ? "agent_message_chunk" : "user_message_chunk",
+            messageId: message.id,
+            content: { type: "text", text: message.text }
+          }
+        }
+      })
+    }
+    return {}
+  }
+
+  advance() {
+    this.revision = "2026-07-23T00:01:00.000Z"
+    this.history.push(
+      { role: "user", id: "second-user", text: "Second prompt" },
+      { role: "assistant", id: "second-assistant", text: "Second response" }
+    )
+  }
+
+  notify() {}
+}
+
 async function startServer({ acp = new FakeAcp(), ...options } = {}) {
   const server = createBridgeServer({
     acp,
@@ -242,6 +285,26 @@ test("replays persistent user and assistant history when reopening an OMP sessio
     })), [
       { role: "user", text: "Persist this prompt" },
       { role: "assistant", text: "Persist this response" }
+    ])
+  } finally {
+    await bridge.close()
+  }
+})
+
+test("reloads a stale session history after ACP reports a newer revision", async () => {
+  const acp = new FreshnessAcp()
+  const bridge = await startServer({ acp })
+  try {
+    const first = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    assert.equal((await first.json()).length, 2)
+
+    acp.advance()
+    const refreshed = await fetch(`${bridge.baseURL}/session/session-1/message`, { headers: authHeaders() })
+    assert.deepEqual((await refreshed.json()).map((message) => message.parts[0].text), [
+      "First prompt",
+      "First response",
+      "Second prompt",
+      "Second response"
     ])
   } finally {
     await bridge.close()

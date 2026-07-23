@@ -23,8 +23,9 @@ export class OmpService {
   #messages = new Map()
   #todos = new Map()
   #configOptions = new Map()
-  #loaded = new Set()
+  #loadedAt = new Map()
   #loads = new Map()
+  #sessionListing
   #promptAcknowledgements = new Map()
   #active = new Set()
   #listeners = new Set()
@@ -40,8 +41,7 @@ export class OmpService {
   }
 
   async listSessions(directory) {
-    const sessions = await this.#acp.listSessions()
-    for (const session of sessions) this.#sessions.set(session.sessionId, session)
+    const sessions = await this.#refreshSessions()
     return sessions
       .filter((session) => !directory || session.cwd === directory)
       .map((session) => sessionView(session, this.#active.has(session.sessionId) ? "busy" : "idle"))
@@ -51,7 +51,6 @@ export class OmpService {
     await this.#acp.start()
     const result = await this.#acp.request("session/new", { cwd: directory, mcpServers: [] })
     this.#rememberConfigOptions(result.sessionId, result.configOptions)
-    this.#loaded.add(result.sessionId)
     const session = {
       sessionId: result.sessionId,
       cwd: directory,
@@ -62,12 +61,14 @@ export class OmpService {
     this.#sessions.set(session.sessionId, session)
     this.#messages.set(session.sessionId, [])
     this.#todos.set(session.sessionId, [])
+    this.#loadedAt.set(session.sessionId, session.updatedAt)
     if (model) await this.setModel(session.sessionId, model)
     this.#emit("session.created", session.sessionId)
     return sessionView(session)
   }
 
   async messages(sessionID) {
+    await this.#refreshSessions()
     await this.#load(sessionID)
     return this.#messages.get(sessionID) ?? []
   }
@@ -121,10 +122,14 @@ export class OmpService {
   }
 
   async #load(sessionID) {
-    if (this.#loaded.has(sessionID)) return
+    if (!this.#sessions.has(sessionID)) await this.listSessions()
+    const session = this.#sessions.get(sessionID)
+    if (!session) throw new Error("OMP session not found")
+    const revision = session.updatedAt ?? ""
+    if (this.#loadedAt.get(sessionID) === revision) return
     let loading = this.#loads.get(sessionID)
     if (!loading) {
-      loading = this.#loadSession(sessionID)
+      loading = this.#loadSession(sessionID, revision)
       this.#loads.set(sessionID, loading)
     }
     try {
@@ -134,15 +139,26 @@ export class OmpService {
     }
   }
 
-  async #loadSession(sessionID) {
-    if (!this.#sessions.has(sessionID)) await this.listSessions()
+  async #loadSession(sessionID, revision) {
     const session = this.#sessions.get(sessionID)
     if (!session) throw new Error("OMP session not found")
-    this.#messages.set(sessionID, this.#messages.get(sessionID) ?? [])
-    this.#todos.set(sessionID, this.#todos.get(sessionID) ?? [])
+    this.#messages.set(sessionID, [])
+    this.#todos.set(sessionID, [])
     const result = await this.#acp.request("session/load", { sessionId: sessionID, cwd: session.cwd, mcpServers: [] }, 300_000)
     this.#rememberConfigOptions(sessionID, result.configOptions)
-    this.#loaded.add(sessionID)
+    this.#loadedAt.set(sessionID, revision)
+  }
+
+  async #refreshSessions() {
+    if (!this.#sessionListing) {
+      this.#sessionListing = this.#acp.listSessions().then((sessions) => {
+        for (const session of sessions) this.#sessions.set(session.sessionId, session)
+        return sessions
+      }).finally(() => {
+        this.#sessionListing = undefined
+      })
+    }
+    return this.#sessionListing
   }
 
   #rememberConfigOptions(sessionID, configOptions) {
